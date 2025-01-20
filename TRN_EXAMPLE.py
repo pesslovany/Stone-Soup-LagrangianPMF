@@ -42,11 +42,11 @@ import json
 #### Problem Setup ####
 turnRate = np.deg2rad(30)
 deltaT   = 1
-nTime    = 20
+nTime    = 1276
 X0       = np.array([36569,50,55581,50])
 P0       = np.diag([90,5,160,5])
 nS       = X0.shape[0]
-MC       = 100
+MC       = 1
 
 #### Initialise Arrays ####
 errorGMF = np.zeros(shape = (nS,nTime,MC))
@@ -75,24 +75,53 @@ for mc in range(0,MC):
 
     #### Define Settings ####
     start_time       = datetime.now().replace(microsecond=0)
-    transition_model = KnownTurnRate(turn_noise_diff_coeffs = [2,2], turn_rate = turnRate)
+    transition_model = KnownTurnRate(turn_noise_diff_coeffs = [5,5], turn_rate = turnRate)
+    #transition_model = CombinedLinearGaussianTransitionModel([ConstantVelocity(1),
+    #                                                      ConstantVelocity(1)])
+    
     # This needs to be done in other way
     time_difference  = timedelta(days = 0, hours = 0, minutes = 0, seconds = deltaT)
     timesteps        = [start_time]
     truth            = GroundTruthPath([GroundTruthState(np.random.multivariate_normal(X0,P0), timestamp = start_time)])
+    
+    traj = loadmat('coordinatesRealLong.mat')
+    traj = np.array(traj['coordinatesReal'])
+    traj = traj.reshape(4, nTime, order='F')
+    
+    traj -= traj[:, 0][:, np.newaxis]
+    traj += X0[:, np.newaxis]
+
+    truth.states[0].state_vector = StateVectors(traj[:, 0].reshape(-1, 1))
+    
     # Create the truth path
     for k in range(1,nTime):
         timesteps.append(start_time + timedelta(seconds = k))
         truth.append(GroundTruthState(transition_model.function(truth[k - 1], noise = True, time_interval = timedelta(seconds = deltaT)),timestamp = timesteps[k]))
     
     #### Measurement Model: Map ####
-    data              = loadmat('/Users/dopestmmac/Desktop/MapTAN.mat')
-    map_x             = np.array(data['map_m'][0][0][0])
-    map_y             = np.array(data['map_m'][0][0][1])
-    map_z             = np.matrix(data['map_m'][0][0][2])
-    interpolator      = RegularGridInterpolator((map_x[:,0],map_y[0,:]),map_z) 
-    Rmap              = 0.1
-    measurement_model = TerrainAidedNavigation(interpolator,noise_covar = Rmap, mapping=(0, 2))
+    #data              = loadmat('/Users/dopestmmac/Desktop/MapTAN.mat')
+    with open('/Users/matoujak/Desktop/Dropbox/file.json', 'r') as file:
+        # Load JSON data
+        data = json.load(file)
+    
+    map_x = data['x']
+    map_y = data['y']
+    map_z = data['z']
+    
+    map_x = np.array(map_x)
+    map_y = np.array(map_y)
+    map_z = np.matrix(map_z)
+    interpolator = RegularGridInterpolator((map_x[0,:],map_y[:,0]), map_z)
+    
+    
+    #data              = loadmat('/Users/dopestmmac/Desktop/MapTAN.mat')
+    # map_x             = np.array(data['map_m'][0][0][0])
+    # map_y             = np.array(data['map_m'][0][0][1])
+    # map_z             = np.matrix(data['map_m'][0][0][2])
+    # interpolator      = RegularGridInterpolator((map_x[:,0],map_y[0,:]),map_z) 
+    
+    Rmap              = 3
+    measurement_model = TerrainAidedNavigation(interpolator, noise_covar = Rmap, mapping=(0, 2))
 
     #### Measurement Model: Range and Bearing ####
     # sensor_x          = 36000
@@ -106,16 +135,18 @@ for mc in range(0,MC):
     
     # Populate the measurement array
     measurements = []
-    for state in truth:
+    for i,state in enumerate(truth, start=1):
         measurement = measurement_model.function(state, noise = True)
+        # if i % 4 == 0:
+        #     measurement += 10
         measurements.append(Detection(measurement, timestamp = state.timestamp, measurement_model = measurement_model))
 
     #### Initialise Point Mass Filter - GSF ####
     predictorGMF    = PointMassPredictor(transition_model)
     updaterGMF      = PointMassUpdater(measurement_model)
-    Npa             = np.array([7, 7, 7, 7]) # for FFT must be ODD!!!!
+    Npa             = np.array([21, 21, 21, 21]) # for FFT must be ODD!!!!
     N               = np.prod(Npa) # number of points - total
-    sFactor         = 4 # scaling factor (number of sigmas covered by the grid)
+    sFactor         = 5 # scaling factor (number of sigmas covered by the grid)
     [predGrid, predGridDelta, gridDimOld, xOld, Ppold] = gridCreation(np.vstack(X0),P0,sFactor,nS,Npa)
     meanX0          = np.vstack(X0)
     pom             = predGrid - np.matlib.repmat(meanX0,1,N)
@@ -136,9 +167,9 @@ for mc in range(0,MC):
     #### Initialise Point Mass Filter - No GSF ####
     predictorPMF    = PointMassPredictor(transition_model)
     updaterPMF      = PointMassUpdater(measurement_model)
-    Npa             = np.array([7, 7, 7, 7]) # for FFT must be ODD!!!!
+    Npa             = np.array([27, 27, 27, 27]) # for FFT must be ODD!!!!
     N               = np.prod(Npa) # number of points - total
-    sFactor         = 4 # scaling factor (number of sigmas covered by the grid)
+    sFactor         = 5 # scaling factor (number of sigmas covered by the grid)
     [predGrid, predGridDelta, gridDimOld, xOld, Ppold] = gridCreation(np.vstack(X0),P0,sFactor,nS,Npa)
     meanX0          = np.vstack(X0)
     pom             = predGrid - np.matlib.repmat(meanX0,1,N)
@@ -186,7 +217,10 @@ for mc in range(0,MC):
         covGMF[:,:,kTime,mc] = np.matrix(post.covar())
         neesGMF[:,kTime,mc]  = errorGMF[:,kTime,mc].reshape(1,nS) @ np.linalg.inv(covGMF[:,:,kTime,mc]) @ errorGMF[:,kTime,mc].reshape(nS,1)
         kTime               += 1
+        print('GMF' + str(kTime))
     end_time = time.time()
+    
+    del prediction, hypothesis, post, priorGMF
     
     #### Run Point Mass Filter - No GSF ####
     start_time = time.time()
@@ -201,7 +235,10 @@ for mc in range(0,MC):
         covPMF[:,:,kTime,mc] = np.matrix(post.covar())
         neesPMF[:,kTime,mc]  = errorPMF[:,kTime,mc].reshape(1,nS) @ np.linalg.inv(covPMF[:,:,kTime,mc]) @ errorPMF[:,kTime,mc].reshape(nS,1)
         kTime               += 1
+        print('PMF' + str(kTime))
     end_time = time.time()
+    
+    del prediction, hypothesis, post, priorPMF
 
     #### Run Particle Filter ####
     start_time = time.time()
@@ -216,7 +253,10 @@ for mc in range(0,MC):
         covPF[:,:,kTime,mc] = np.matrix(post.covar)
         neesPF[:,kTime,mc]  = errorPF[:,kTime,mc].reshape(1,nS) @ np.linalg.inv(covPF[:,:,kTime,mc]) @ errorPF[:,kTime,mc].reshape(nS,1)
         kTime              += 1
+        print('PF' + str(kTime))
     end_time = time.time()
+    
+    del prediction, hypothesis, post, priorPF
 
 #### Plotting ####
 plt.figure()

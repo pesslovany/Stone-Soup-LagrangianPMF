@@ -87,7 +87,7 @@ class PointMassPredictor(Predictor):
                 chip_              = Xbark - xbark[:, None]
                 
                 # Compute Ps using optimal weighting
-                alpha = 0  # Adjust if needed
+                alpha = 1  # Adjust if needed
                 Ps    = alpha * (4 / (n * (s + 2)))**(2 / (s + 4)) * (chip_ * wbark) @ chip_.T + Q # Silverman's rule of thumb
                 Ps    = (Ps + Ps.T) / 2
                 
@@ -130,45 +130,6 @@ class PointMassPredictor(Predictor):
                 nuxk   = XkGSF - xhatk
                 Phatk += (nuxk*wkGSF) @ nuxk.T
                 Phatk  = (Phatk + Phatk.T) / 2  
-
-                # Ht = np.transpose(H, (1, 0, 2))
-
-                # #W = np.einsum('mnr,nd,nmr->r', H, Ps, Ht) + measModel.covar() # W = H * Ps * Ht + R
-                # #K = np.einsum('mnr,r->mnr', np.einsum('mn,ndr->mdr', Ps, Ht), 1/W)  # K = Ps * Ht / W - TODO some lines works only for nz = 1
-                
-                # W = np.einsum('bar,mn,nkr->bkr', H, Ps, Ht) + measModel.covar()[:, :, np.newaxis]
-                # # Assuming all matrices in the array are 2x2, preallocating the inverted array
-                # invW = np.empty_like(W)
-                # # Inverting matrices using vectorized operations
-                # a, b, c, d = W[:, 0, 0], W[:, 0, 1], W[:, 1, 0], W[:, 1, 1]
-                # det = a * d - b * c  # Determinant for 2x2 matrices
-                # invW[:, 0, 0], invW[:, 0, 1] = d / det, -b / det
-                # invW[:, 1, 0], invW[:, 1, 1] = -c / det, a / det
-                # K = np.einsum('mn,abr,bjr->ajr', Ps, Ht, invW)
-
-                # # Measurement residual and update
-                # v = futureMeas.state_vector - measModel.function(prior)
-                # XkGSF = Xbark + np.einsum('abr,br->ar', K, v).reshape(K.shape[0], -1)
-                
-                # # Posterior covariance update
-                # KH    = np.einsum('mnr,ndr->mdr', K, H)
-                # eye_s = np.eye(s)
-                # Kt    = np.transpose(K, (1, 0, 2))
-                # PkGSF = np.einsum('ik,kjl->kil', Ps, eye_s[:, :, None] - KH) + np.einsum('klr,ldr->kdr', K, Kt)
-                
-                # # Weight update - TODO
-                # wkGSF = np.log(wbark) - np.log(np.sqrt(W)) + v*(v/W)
-                # m     = np.max(wkGSF)
-                # wkGSF = np.exp(wkGSF - (m + np.log(np.sum(np.exp(wkGSF - m)))));
-                # wkGSF = wkGSF / np.sum(wkGSF);
-                
-                # # Compute state estimate and covariance
-                # xhatk = XkGSF @ wkGSF.T      
-                # Phatk =  np.sum(PkGSF * wkGSF.reshape(1, 1, -1),axis=2)
-                # nuxk  = XkGSF - xhatk
-                
-                # Phatk += (nuxk * wkGSF).dot(nuxk.T)
-                # Phatk  = (Phatk + Phatk.T) / 2  # Symmetrize
     
                 matrixForEig = inv(F) @ (Phatk + Q) @ inv(F.T)
                 measMean     = inv(F) @ xhatk
