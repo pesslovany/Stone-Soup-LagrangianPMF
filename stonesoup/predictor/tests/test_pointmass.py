@@ -4,9 +4,9 @@ import datetime
 from datetime import timedelta
 
 import numpy as np
-import pytest
 from numpy.linalg import inv
-from stonesoup.functions import gridCreation
+
+from stonesoup.functions import grid_creation
 from stonesoup.models.transition.linear import KnownTurnRate
 from stonesoup.predictor.kalman import KalmanPredictor
 from stonesoup.predictor.pointmass import PointMassPredictor
@@ -28,10 +28,9 @@ def test_pointmass():
     Npa = np.array(
         [33, 33, 33, 33]
     )  # 33 number of points per axis, for FFT must be ODD!!!!
-    N = np.prod(Npa)  # number of points - total
     sFactor = 4  # scaling factor (number of sigmas covered by the grid)
 
-    [predGrid, predGridDelta, gridDimOld, xOld, Ppold] = gridCreation(
+    [predGrid, predGridDelta, gridDimOld, xOld, Ppold] = grid_creation(
         np.vstack(meanX0), varX0, sFactor, nx, Npa
     )
 
@@ -40,7 +39,7 @@ def test_pointmass():
     prediction = predictorKF.predict(priorKF, timestamp=start_time + time_difference)
 
     meanX0 = np.vstack(meanX0)
-    pom = predGrid - np.matlib.repmat(meanX0, 1, N)
+    pom = predGrid - meanX0
     denominator = np.sqrt((2 * np.pi) ** nx) * np.linalg.det(varX0)
     pompom = np.sum(
         -0.5 * np.multiply(pom.T @ inv(varX0), pom.T), 1
@@ -84,7 +83,3 @@ def test_pointmass():
     assert np.all(priorPMF.eigVec == predictionPMFnoTime.eigVec)
     assert np.all(priorPMF.Npa == predictionPMFnoTime.Npa)
     assert np.all(priorPMF.timestamp == predictionPMFnoTime.timestamp)
-
-
-if __name__ == "__main__":
-    pytest.main(["-v", __file__])

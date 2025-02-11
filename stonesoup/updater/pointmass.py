@@ -1,11 +1,13 @@
 from functools import lru_cache
+
 import numpy as np
 from scipy.stats import multivariate_normal
-from stonesoup.types.state import PointMassState
+
 from ..base import Property
 from ..types.prediction import (
     MeasurementPrediction,
 )
+from ..types.state import PointMassState
 from ..types.update import Update
 from .base import Updater
 
@@ -50,12 +52,9 @@ class PointMassUpdater(Updater):
         x = measurement_model.function(predicted_state)  # State to measurement space
         pdf_value = multivariate_normal.pdf(
             x.T, np.ravel(hypothesis.measurement.state_vector), R
-        ) # likelihood
-        
-        if np.sum(pdf_value) == 0:
-            pdf_value += 1e-120
-
+        )  # likelihood
         new_weight = np.ravel(hypothesis.prediction.weight) * np.ravel(pdf_value)
+
         new_weight = new_weight / (
             np.prod(hypothesis.prediction.grid_delta) * sum(new_weight)
         )  # Normalization

@@ -18,7 +18,7 @@ from .. import (
     gauss2sigma,
     gm_reduce_single,
     gm_sample,
-    gridCreation,
+    grid_creation,
     jacobian,
     mod_bearing,
     mod_elevation,
@@ -27,17 +27,18 @@ from .. import (
     roty,
     rotz,
     sphere2cart,
+    stochastic_cubature_rule_points,
 )
 
 
-def test_gridCreation():
+def test_grid_creation():
     nx = 4
     meanX0 = np.array([36569, 50, 55581, 50])  # mean value
     varX0 = np.diag([90, 5, 160, 5])  # variance
     Npa = np.array([31, 31, 27, 27])  # must be ODD!
     sFactor = 4  # scaling factor (number of sigmas covered by the grid)
 
-    [predGrid, predGridDelta, gridDimOld, xOld, Ppold] = gridCreation(
+    [predGrid, predGridDelta, gridDimOld, xOld, Ppold] = grid_creation(
         np.vstack(meanX0), varX0, sFactor, nx, Npa
     )
 
@@ -452,3 +453,34 @@ def test_cubature_transform(mean, covar, alp):
     assert np.allclose(outcovar, instate.covar)
     assert np.allclose(mean, instate.state_vector)
     assert np.allclose(covar, instate.covar)
+
+
+@pytest.mark.parametrize(
+    "order, nx",
+    [
+        (3, 3),
+        (5, 4),
+        (1, 2)
+    ]
+)
+def test_stochastic_integration(order, nx):
+    points, weights = stochastic_cubature_rule_points(nx, order)
+    # Mean
+    assert np.allclose(np.average(points, weights=weights, axis=1),
+                       0, atol=1e-5)
+    # Weights
+    assert np.isclose(np.sum(weights), 1, atol=1e-5)
+    if order != 1:  # For order 1 it does not make sense to check variance of points
+        # Covariance
+        var = ((weights * points) @ points.T)
+        # Check if diagonal elements are close to 1
+        diagonal_elements = np.diag(var)
+        assert np.allclose(diagonal_elements, 1, atol=1e-5)
+        # Check if off-diagonal elements are close to 0
+        off_diagonal_elements = var[~np.eye(nx, dtype=bool)]
+        assert np.allclose(off_diagonal_elements, 0, atol=1e-5)
+
+
+def test_stochastic_integration_invalid_order():
+    with pytest.raises(ValueError, match="This order of SIF is not supported"):
+        stochastic_cubature_rule_points(5, 2)
