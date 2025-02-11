@@ -25,7 +25,7 @@ from stonesoup.resampler.particle import ESSResampler
 from stonesoup.types.state import GaussianState
 
 from stonesoup.updater.particle import ParticleUpdater
-from stonesoup.functions import gridCreation
+from stonesoup.functions import grid_creation
 from numpy.linalg import inv
 from stonesoup.types.state import PointMassState
 from stonesoup.types.hypothesis import SingleHypothesis
@@ -109,9 +109,9 @@ Rmap              = 1
 measurement_model = TerrainAidedNavigation(interpolator,noise_covar = Rmap, mapping=(0, 2))
 
 
-plt.figure()
-plt.contourf(map_x,map_y,map_z)
-plt.colorbar()
+# plt.figure()
+# plt.contourf(map_x,map_y,map_z)
+# plt.colorbar()
 
 
 # import numpy as np
@@ -154,7 +154,7 @@ for mc in range(0,MC):
     for state in truth:
         measurement = measurement_model.function(state, noise = True)
         measurements.append(Detection(measurement, timestamp = state.timestamp, measurement_model = measurement_model))
-        plt.scatter(state.state_vector[0],state.state_vector[2])
+        #plt.scatter(state.state_vector[0],state.state_vector[2])
 
     plt.show()
     
@@ -170,9 +170,9 @@ for mc in range(0,MC):
     Npa             = np.array([7, 5, 7, 5]) # for FFT must be ODD!!!!
     N               = np.prod(Npa) # number of points - total
     sFactor         = 6 # scaling factor (number of sigmas covered by the grid)
-    [predGrid, predGridDelta, gridDimOld, xOld, Ppold] = gridCreation(np.vstack(X0),P0,sFactor,nS,Npa)
+    [predGrid, predGridDelta, gridDimOld, xOld, Ppold] = grid_creation(np.vstack(X0),P0,sFactor,nS,Npa)
     meanX0          = np.vstack(X0)
-    pom             = predGrid - np.matlib.repmat(meanX0,1,N)
+    pom             = predGrid - np.tile(meanX0, (1, N))
     denominator     = np.sqrt((2*np.pi)**nS)*np.linalg.det(P0)
     pompom          = np.sum(-0.5*np.multiply(pom.T@inv(P0),pom.T),1) #elementwise multiplication
     pomexp          = np.exp(pompom)
@@ -193,9 +193,9 @@ for mc in range(0,MC):
     Npa             = np.array([9, 5, 9, 5]) # for FFT must be ODD!!!!
     N               = np.prod(Npa) # number of points - total
     sFactor         = 6 # scaling factor (number of sigmas covered by the grid)
-    [predGrid, predGridDelta, gridDimOld, xOld, Ppold] = gridCreation(np.vstack(X0),P0,sFactor,nS,Npa)
+    [predGrid, predGridDelta, gridDimOld, xOld, Ppold] = grid_creation(np.vstack(X0),P0,sFactor,nS,Npa)
     meanX0          = np.vstack(X0)
-    pom             = predGrid - np.matlib.repmat(meanX0,1,N)
+    pom             = predGrid - np.tile(meanX0, (1, N))
     denominator     = np.sqrt((2*np.pi)**nS)*np.linalg.det(P0)
     pompom          = np.sum(-0.5*np.multiply(pom.T@inv(P0),pom.T),1) #elementwise multiplication
     pomexp          = np.exp(pompom)

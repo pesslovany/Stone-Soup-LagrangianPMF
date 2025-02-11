@@ -4,7 +4,7 @@ import numpy as np
 import plotly.io as pio
 from scipy.interpolate import RegularGridInterpolator
 from scipy.signal import fftconvolve
-from stonesoup.functions import gridCreation
+from stonesoup.functions import grid_creation
 from stonesoup.types.state import PointMassState
 
 from ..base import Property
@@ -134,7 +134,7 @@ class PointMassPredictor(Predictor):
                 matrixForEig = inv(F) @ (Phatk + Q) @ inv(F.T)
                 measMean     = inv(F) @ xhatk
 
-                measGridNew, GridDeltaOld, gridDimOld, nothing, eigVect = gridCreation(
+                measGridNew, GridDeltaOld, gridDimOld, nothing, eigVect = grid_creation(
                     measMean,
                     matrixForEig,
                     self.sFactor,
@@ -146,7 +146,7 @@ class PointMassPredictor(Predictor):
                 invFT = np.linalg.inv(F.T)
                 FqF   = invF @ Q @ invFT
                 matrixForEig = prior.covar() + FqF
-                measGridNew, GridDeltaOld, gridDimOld, nothing, eigVect = gridCreation(
+                measGridNew, GridDeltaOld, gridDimOld, nothing, eigVect = grid_creation(
                     prior.mean.reshape(-1, 1),
                     matrixForEig,
                     self.sFactor,

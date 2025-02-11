@@ -25,7 +25,7 @@ from stonesoup.resampler.particle import ESSResampler
 from stonesoup.types.state import GaussianState
 
 from stonesoup.updater.particle import ParticleUpdater
-from stonesoup.functions import gridCreation
+from stonesoup.functions import grid_creation
 from numpy.linalg import inv
 from stonesoup.types.state import PointMassState
 from stonesoup.types.hypothesis import SingleHypothesis
@@ -151,7 +151,7 @@ for mc in range(0,MC):
     Npa             = np.array([19, 15, 19, 15]) # for FFT must be ODD!!!!
     N               = np.prod(Npa) # number of points - total
     sFactor         = 5 # scaling factor (number of sigmas covered by the grid)
-    [predGrid, predGridDelta, gridDimOld, xOld, Ppold] = gridCreation(np.vstack(X0),P0,sFactor,nS,Npa)
+    [predGrid, predGridDelta, gridDimOld, xOld, Ppold] = grid_creation(np.vstack(X0),P0,sFactor,nS,Npa)
     meanX0          = np.vstack(X0)
     pom             = predGrid - np.matlib.repmat(meanX0,1,N)
     denominator     = np.sqrt((2*np.pi)**nS)*np.linalg.det(P0)
@@ -174,7 +174,7 @@ for mc in range(0,MC):
     Npa             = np.array([21, 17, 21, 17]) # for FFT must be ODD!!!!
     N               = np.prod(Npa) # number of points - total
     sFactor         = 5 # scaling factor (number of sigmas covered by the grid)
-    [predGrid, predGridDelta, gridDimOld, xOld, Ppold] = gridCreation(np.vstack(X0),P0,sFactor,nS,Npa)
+    [predGrid, predGridDelta, gridDimOld, xOld, Ppold] = grid_creation(np.vstack(X0),P0,sFactor,nS,Npa)
     meanX0          = np.vstack(X0)
     pom             = predGrid - np.matlib.repmat(meanX0,1,N)
     denominator     = np.sqrt((2*np.pi)**nS)*np.linalg.det(P0)

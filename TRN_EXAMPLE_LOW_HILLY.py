@@ -25,7 +25,7 @@ from stonesoup.resampler.particle import ESSResampler
 from stonesoup.types.state import GaussianState
 
 from stonesoup.updater.particle import ParticleUpdater
-from stonesoup.functions import gridCreation
+from stonesoup.functions import grid_creation
 from numpy.linalg import inv
 from stonesoup.types.state import PointMassState
 from stonesoup.types.hypothesis import SingleHypothesis
@@ -114,22 +114,22 @@ measurement_model = TerrainAidedNavigation(interpolator,noise_covar = Rmap, mapp
 # plt.colorbar()
 
 
-import numpy as np
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
+# import numpy as np
+# import matplotlib.pyplot as plt
+# from mpl_toolkits.mplot3d import Axes3D
 
-# Create the figure and 3D axis
-fig = plt.figure()
-ax = fig.add_subplot(111, projection='3d')
+# # Create the figure and 3D axis
+# fig = plt.figure()
+# ax = fig.add_subplot(111, projection='3d')
 
-# Plot filled contours
-contour = ax.contourf(map_x, map_y, map_z, 100, cmap='viridis')  # Adjust '20' for more/less contour levels
+# # Plot filled contours
+# contour = ax.contourf(map_x, map_y, map_z, 100, cmap='viridis')  # Adjust '20' for more/less contour levels
 
-# Add a colorbar to the plot
-fig.colorbar(contour, ax=ax)
+# # Add a colorbar to the plot
+# fig.colorbar(contour, ax=ax)
 
-# Show the plot
-plt.show()
+# # Show the plot
+# plt.show()
 
 
 #### Monte Carlo Runs ####
@@ -170,7 +170,7 @@ for mc in range(0,MC):
     Npa             = np.array([7, 5, 7, 5]) # for FFT must be ODD!!!!
     N               = np.prod(Npa) # number of points - total
     sFactor         = 6 # scaling factor (number of sigmas covered by the grid)
-    [predGrid, predGridDelta, gridDimOld, xOld, Ppold] = gridCreation(np.vstack(X0),P0,sFactor,nS,Npa)
+    [predGrid, predGridDelta, gridDimOld, xOld, Ppold] = grid_creation(np.vstack(X0),P0,sFactor,nS,Npa)
     meanX0          = np.vstack(X0)
     pom             = predGrid - np.matlib.repmat(meanX0,1,N)
     denominator     = np.sqrt((2*np.pi)**nS)*np.linalg.det(P0)
@@ -193,7 +193,7 @@ for mc in range(0,MC):
     Npa             = np.array([9, 5, 9, 5]) # for FFT must be ODD!!!!
     N               = np.prod(Npa) # number of points - total
     sFactor         = 6 # scaling factor (number of sigmas covered by the grid)
-    [predGrid, predGridDelta, gridDimOld, xOld, Ppold] = gridCreation(np.vstack(X0),P0,sFactor,nS,Npa)
+    [predGrid, predGridDelta, gridDimOld, xOld, Ppold] = grid_creation(np.vstack(X0),P0,sFactor,nS,Npa)
     meanX0          = np.vstack(X0)
     pom             = predGrid - np.matlib.repmat(meanX0,1,N)
     denominator     = np.sqrt((2*np.pi)**nS)*np.linalg.det(P0)
