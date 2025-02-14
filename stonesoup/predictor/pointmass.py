@@ -93,7 +93,7 @@ class PointMassPredictor(Predictor):
                 
                 # Jacobian and measurement noise
                 v      = futureMeas.state_vector - measModel.function(prior)
-                H      = measModel.jacobian(prior)  # Compute Jacobian at predicted state points - TODO STONE SOUP JACOBIAN NOT VECTORIZED
+                H      = measModel.jacobian(prior)  # Compute Jacobian at predicted state points
 
                 # Gaussian sum update
                 Ht     = np.transpose(H,[1,0,2])
@@ -166,6 +166,7 @@ class PointMassPredictor(Predictor):
             )
             inerpOn = np.dot(np.linalg.inv(prior.eigVec), (measGridNew - prior.center))
             measPdfNew = Fint(inerpOn.T).T
+            
 
             # Predictive grid
             predGrid = np.dot(F, measGridNew)
@@ -198,21 +199,52 @@ class PointMassPredictor(Predictor):
                 TPMrow, prior.Npa, order="C"
             )  # Into physical space
 
+            # filtDenDOTprodDeltasCub = filtDenDOTprodDeltasCub/np.sum(filtDenDOTprodDeltasCub)
+            # TPMrowCubPom = TPMrowCubPom/(np.sum(TPMrowCubPom)*np.prod(GridDeltaOld))
+            
+            # import matplotlib.pyplot as plt
+            #   # Flatten tensors
+            # filt_flat = filtDenDOTprodDeltasCub.flatten()
+            # TPM_flat = TPMrowCubPom.flatten()
+            
+            # # Create figure with two subplots
+            # fig, axes = plt.subplots(2, 1, figsize=(10, 8))
+            
+            # # Plot filtDenDOTprodDeltasCub
+            # axes[0].plot(filt_flat)
+            # axes[0].set_title("filtDenDOTprodDeltasCub (Flattened)")
+            # axes[0].set_xlabel("Index")
+            # axes[0].set_ylabel("Value")
+            
+            # # Plot TPMrowCubPom
+            # axes[1].plot(TPM_flat, linestyle="dashed")
+            # axes[1].set_title("TPMrowCubPom (Flattened)")
+            # axes[1].set_xlabel("Index")
+            # axes[1].set_ylabel("Value")
+            
+            # # Adjust layout and show
+            # plt.tight_layout()
+            # plt.show()
+            
             # Compute the convolution using scipy.signal.fftconvolve
             convolution_result_complex = fftconvolve(
                 filtDenDOTprodDeltasCub, TPMrowCubPom, mode="same"
             )
-
+            
+            
             # Take the real part of the convolution result to get a real-valued result
             convolution_result_real = np.real(convolution_result_complex).T
-
             predDensityProb = np.reshape(convolution_result_real, (-1, 1), order="F")
+            
             if np.sum(predDensityProb) == 0:
                 predDensityProb += 1e-120
+                
+            #print(np.sum(predDensityProb) * np.prod(GridDelta))
             # Normalization (theoretically not needed)
             predDensityProb = predDensityProb / (
                 np.sum(predDensityProb) * np.prod(GridDelta)
             )
+            
                   
             Ppold = F @ eigVect;
             # ----------------------------------------------------------------------------------------
