@@ -5,12 +5,14 @@ import plotly.io as pio
 from scipy.interpolate import RegularGridInterpolator
 from scipy.signal import fftconvolve
 from stonesoup.functions import grid_creation
+from stonesoup.functions import circumscribe_intersection
 from stonesoup.types.state import PointMassState
+from scipy.special import erfc
 
 from ..base import Property
 from ..types.array import StateVectors
 from .base import Predictor
-from scipy.linalg import inv, sqrtm, eigh
+from scipy.linalg import inv
 
 pio.renderers.default = "browser"
 
@@ -71,23 +73,26 @@ class PointMassPredictor(Predictor):
             # # Initialize and normalize
             if runGSFversion:
         
-                # Normalize weights
-                wbark  = prior.weight / np.sum(prior.weight)
-
-                # Dimensions
-                s,n    = prior.state_vector.shape
-                R      = np.array(np.matrix(measModel.covar()))
-                ny     = R.shape[0]
-                eye_s  = np.eye(s)
+                # Normalize weights and take every second element
+                wbark = prior.weight[::3]  
+                wbark /= np.sum(wbark)  # Re-normalize after subsampling
                 
-                # Predicted state mean and covariance components
-                Xbark              = F @ prior.state_vector
+                # Dimensions
+                s, n = prior.state_vector.shape
+                n = n // 3 + 1# Adjust n after taking every second element
+                R = np.array(np.matrix(measModel.covar()))
+                ny = R.shape[0]
+                eye_s = np.eye(s)
+                
+                # Predicted state mean and covariance components (every second column)
+                Xbark = F @ prior.state_vector[:, ::3]
+
                 prior.state_vector = Xbark
                 xbark              = Xbark @ wbark
                 chip_              = Xbark - xbark[:, None]
                 
                 # Compute Ps using optimal weighting
-                alpha  = 0.3 # Adjust if needed
+                alpha  = 0.5 # Adjust if needed
                 Ps     = alpha * (4 / (n * (s + 2)))**(2 / (s + 4)) * (chip_ * wbark) @ chip_.T + Q # Silverman's rule of thumb
                 Ps     = (Ps + Ps.T) / 2
                 
@@ -129,10 +134,15 @@ class PointMassPredictor(Predictor):
                 Phatk  = np.sum(np.multiply(PkGSF,wkGSF),axis=2)
                 nuxk   = XkGSF - xhatk
                 Phatk += (nuxk*wkGSF) @ nuxk.T
-                Phatk  = (Phatk + Phatk.T) / 2  
-    
-                matrixForEig = inv(F) @ (Phatk + Q) @ inv(F.T)
-                measMean     = inv(F) @ xhatk
+                Phatk  = (Phatk + Phatk.T) / 2 
+                
+                measMean = invF @ xhatk
+                matrixForEig = invF @ Phatk @ np.linalg.inv(F.T) + Q
+                
+                #alpha = 1 - 0.5 * erfc(self.sFactor / np.sqrt(s))
+            
+                #measMean, matrixForEig = circumscribe_intersection(prior.mean.reshape(-1, 1), prior.covar(), newMeasMeanInOldSpace, newMeasVarInOldSpace, alpha)
+                #matrixForEig = matrixForEig + Q;
 
                 measGridNew, GridDeltaOld, gridDimOld, nothing, eigVect = grid_creation(
                     measMean,

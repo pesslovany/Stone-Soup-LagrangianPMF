@@ -3,6 +3,7 @@
 import copy
 import itertools
 import warnings
+from scipy.stats import chi2
 from functools import lru_cache
 
 import numpy as np
@@ -13,6 +14,7 @@ from scipy.stats import ortho_group
 from ..types.array import CovarianceMatrix, StateVector, StateVectors
 from ..types.numeric import Probability
 from ..types.state import State
+
 
 
 def grid_creation(xp_aux, Pp_aux, sFactor, nx, Npa):

@@ -50,7 +50,7 @@ deltaT   = 2
 nTime    = 150
 P0       = np.diag([120,20,120,20])
 nS       = 4
-MC       = 10
+MC       = 50
 
 # Preallocate the timing arrays for each method
 end_time_GMF = np.zeros(MC)
@@ -133,12 +133,12 @@ measurement_model = TerrainAidedNavigation(interpolator,noise_covar = Rmap, mapp
 #### Monte Carlo Runs ####
 for mc in range(0,MC):
     
-    plt.figure()
-    plt.contourf(map_x,map_y,map_z)
-    plt.colorbar()
+    # plt.figure()
+    # plt.contourf(map_x,map_y,map_z)
+    # plt.colorbar()
     
     #### MC Settings ####
-    #np.random.seed(mc)
+    np.random.seed(mc)
     print(mc)
     
     # Select one of the speed ranges randomly
@@ -153,7 +153,7 @@ for mc in range(0,MC):
     
     #### Define Settings ####
     start_time       = datetime.now().replace(microsecond=0)
-    transition_model = KnownTurnRate(turn_noise_diff_coeffs = [10,10], turn_rate = turnRate)
+    transition_model = KnownTurnRate(turn_noise_diff_coeffs = [5,5], turn_rate = turnRate)
     timesteps        = [start_time]
     truth            = GroundTruthPath([GroundTruthState(np.random.multivariate_normal(X0,P0), timestamp = start_time)])
     # Create the truth path
@@ -182,8 +182,7 @@ for mc in range(0,MC):
     #### Initialise Point Mass Filter - GSF ####
     predictorGMF    = PointMassPredictor(transition_model)
     updaterGMF      = PointMassUpdater(measurement_model)
-    #Npa             = np.array([47, 29, 47, 29]) # for FFT must be ODD!!!!
-    Npa             = np.array([39, 27, 39, 27]) # for FFT must be ODD!!!!
+    Npa             = np.array([23, 23, 23, 23]) # for FFT must be ODD!!!!
     N               = np.prod(Npa) # number of points - total
     sFactor         = 5 # scaling factor (number of sigmas covered by the grid)
     [predGrid, predGridDelta, gridDimOld, xOld, Ppold] = grid_creation(np.vstack(X0),P0,sFactor,nS,Npa)
@@ -195,13 +194,13 @@ for mc in range(0,MC):
     predDensityProb = pomexp/denominator # Adding probabilities to points
     predDensityProb = predDensityProb/(sum(predDensityProb)*np.prod(predGridDelta))
     priorGMF        = PointMassState(state_vector = StateVectors(predGrid),
-                                     weight       = predDensityProb,
-                                     grid_delta   = predGridDelta,
-                                     grid_dim     = gridDimOld,
-                                     center       = xOld,
-                                     eigVec       = Ppold,
-                                     Npa          = Npa,
-                                     timestamp    = start_time)
+                                      weight       = predDensityProb,
+                                      grid_delta   = predGridDelta,
+                                      grid_dim     = gridDimOld,
+                                      center       = xOld,
+                                      eigVec       = Ppold,
+                                      Npa          = Npa,
+                                      timestamp    = start_time)
     
     #### Run Point Mass Filter - GSF ####
     start_time_GMF[mc] = time.time()
@@ -223,8 +222,7 @@ for mc in range(0,MC):
     #### Initialise Point Mass Filter - No GSF ####
     predictorPMF    = PointMassPredictor(transition_model)
     updaterPMF      = PointMassUpdater(measurement_model)
-    #Npa             = np.array([51, 31, 51, 31]) # for FFT must be ODD!!!!
-    Npa             = np.array([41, 31, 41, 31]) # for FFT must be ODD!!!!
+    Npa             = np.array([27, 27, 27, 27]) # for FFT must be ODD!!!!
     N               = np.prod(Npa) # number of points - total
     sFactor         = 5 # scaling factor (number of sigmas covered by the grid)
     [predGrid, predGridDelta, gridDimOld, xOld, Ppold] = grid_creation(np.vstack(X0),P0,sFactor,nS,Npa)
@@ -266,36 +264,31 @@ for mc in range(0,MC):
     nParticles_Res = np.round(N*1).astype(int)
     nParticles_Sys =  np.round(N*2.2).astype(int)
     
-    # nParticles_Strat = np.round(N*2).astype(int)
-    # nParticles_Res = np.round(N*1).astype(int)
-    # nParticles_Sys =  np.round(N*2).astype(int)
-
-
     
-    #### Initialise Particle Filter - Stratified ####
-    predictorPF_Strat = ParticlePredictor(transition_model)
-    resamplerPF_Strat = StratifiedResampler()
-    resamplerPF_Strat = ESSResampler(threshold = nParticles_Strat*0.8, resampler = resamplerPF_Strat)
-    updaterPF_Strat   = ParticleUpdater(measurement_model, resamplerPF_Strat)
-    samplesPF_Strat   = multivariate_normal.rvs(X0, P0, size = nParticles_Strat)
-    priorPF_Strat     = ParticleState(state_vector = StateVectors(samplesPF_Strat.T), weight = np.array([Probability(1/nParticles_Strat)]*nParticles_Strat), timestamp = start_time)
+    # #### Initialise Particle Filter - Stratified ####
+    # predictorPF_Strat = ParticlePredictor(transition_model)
+    # resamplerPF_Strat = StratifiedResampler()
+    # resamplerPF_Strat = ESSResampler(threshold = nParticles_Strat*0.8, resampler = resamplerPF_Strat)
+    # updaterPF_Strat   = ParticleUpdater(measurement_model, resamplerPF_Strat)
+    # samplesPF_Strat   = multivariate_normal.rvs(X0, P0, size = nParticles_Strat)
+    # priorPF_Strat     = ParticleState(state_vector = StateVectors(samplesPF_Strat.T), weight = np.array([Probability(1/nParticles_Strat)]*nParticles_Strat), timestamp = start_time)
     
     
-    #### Run Particle Filter - Stratified ####
-    start_time_Strat[mc] = time.time()
-    kTime      = 0
-    for measurement in measurements:
-        prediction_Strat     = predictorPF_Strat.predict(priorPF_Strat, timestamp = measurement.timestamp)
-        hypothesis_Strat     = SingleHypothesis(prediction_Strat, measurement)
-        post_Strat           = updaterPF_Strat.update(hypothesis_Strat)
-        priorPF_Strat        = post_Strat
-        errorPF_Strat[:,kTime,mc] = np.array(truth.states[kTime].state_vector).T - np.array(post_Strat.mean).T
-        statePF_Strat[:,kTime,mc] = np.array(post_Strat.mean).T
-        covPF_Strat[:,:,kTime,mc] = np.matrix(post_Strat.covar)
-        neesPF_Strat[:,kTime,mc]  = errorPF_Strat[:,kTime,mc].reshape(1,nS) @ np.linalg.pinv(covPF_Strat[:,:,kTime,mc]) @ errorPF_Strat[:,kTime,mc].reshape(nS,1)
-        kTime                += 1
-    end_time_Strat[mc] = time.time()
-    del prediction_Strat, hypothesis_Strat, post_Strat, priorPF_Strat, samplesPF_Strat
+    # #### Run Particle Filter - Stratified ####
+    # start_time_Strat[mc] = time.time()
+    # kTime      = 0
+    # for measurement in measurements:
+    #     prediction_Strat     = predictorPF_Strat.predict(priorPF_Strat, timestamp = measurement.timestamp)
+    #     hypothesis_Strat     = SingleHypothesis(prediction_Strat, measurement)
+    #     post_Strat           = updaterPF_Strat.update(hypothesis_Strat)
+    #     priorPF_Strat        = post_Strat
+    #     errorPF_Strat[:,kTime,mc] = np.array(truth.states[kTime].state_vector).T - np.array(post_Strat.mean).T
+    #     statePF_Strat[:,kTime,mc] = np.array(post_Strat.mean).T
+    #     covPF_Strat[:,:,kTime,mc] = np.matrix(post_Strat.covar)
+    #     neesPF_Strat[:,kTime,mc]  = errorPF_Strat[:,kTime,mc].reshape(1,nS) @ np.linalg.pinv(covPF_Strat[:,:,kTime,mc]) @ errorPF_Strat[:,kTime,mc].reshape(nS,1)
+    #     kTime                += 1
+    # end_time_Strat[mc] = time.time()
+    # del prediction_Strat, hypothesis_Strat, post_Strat, priorPF_Strat, samplesPF_Strat
     
     
     # #### Initialise Particle Filter - Residual ####
@@ -324,52 +317,52 @@ for mc in range(0,MC):
     
     
     
-    # #### Initialise Particle Filter - Systematic ####
-    # predictorPF_Systematic = ParticlePredictor(transition_model)
-    # resamplerPF_Systematic = SystematicResampler()
-    # resamplerPF_Systematic = ESSResampler(threshold = nParticles_Sys*0.8, resampler = resamplerPF_Systematic)
-    # updaterPF_Systematic   = ParticleUpdater(measurement_model, resamplerPF_Systematic)
-    # samplesPF_Systematic   = multivariate_normal.rvs(X0, P0, size = nParticles_Sys)
-    # priorPF_Systematic     = ParticleState(state_vector = StateVectors(samplesPF_Systematic.T), weight = np.array([Probability(1/nParticles_Sys)]*nParticles_Sys), timestamp = start_time)
+    #### Initialise Particle Filter - Systematic ####
+    predictorPF_Systematic = ParticlePredictor(transition_model)
+    resamplerPF_Systematic = SystematicResampler()
+    resamplerPF_Systematic = ESSResampler(threshold = nParticles_Sys*0.8, resampler = resamplerPF_Systematic)
+    updaterPF_Systematic   = ParticleUpdater(measurement_model, resamplerPF_Systematic)
+    samplesPF_Systematic   = multivariate_normal.rvs(X0, P0, size = nParticles_Sys)
+    priorPF_Systematic     = ParticleState(state_vector = StateVectors(samplesPF_Systematic.T), weight = np.array([Probability(1/nParticles_Sys)]*nParticles_Sys), timestamp = start_time)
 
     
-    # #### Run Particle Filter - Systematic ####
-    # start_time_Systematic[mc] = time.time()
-    # kTime      = 0
-    # for measurement in measurements:
-    #     prediction_Systematic    = predictorPF_Systematic.predict(priorPF_Systematic, timestamp = measurement.timestamp)
-    #     hypothesis_Systematic    = SingleHypothesis(prediction_Systematic, measurement)
-    #     post_Systematic          = updaterPF_Systematic.update(hypothesis_Systematic)
-    #     priorPF_Systematic       = post_Systematic
-    #     errorPF_Systematic[:,kTime,mc] = np.array(truth.states[kTime].state_vector).T - np.array(post_Systematic.mean).T
-    #     statePF_Systematic[:,kTime,mc] = np.array(post_Systematic.mean).T
-    #     covPF_Systematic[:,:,kTime,mc] = np.matrix(post_Systematic.covar)
-    #     neesPF_Systematic[:,kTime,mc]  = errorPF_Systematic[:,kTime,mc].reshape(1,nS) @ np.linalg.pinv(covPF_Systematic[:,:,kTime,mc]) @ errorPF_Systematic[:,kTime,mc].reshape(nS,1)
-    #     kTime                    += 1
-    # end_time_Systematic[mc] = time.time()
-    # del prediction_Systematic, hypothesis_Systematic, post_Systematic, priorPF_Systematic, samplesPF_Systematic
+    #### Run Particle Filter - Systematic ####
+    start_time_Systematic[mc] = time.time()
+    kTime      = 0
+    for measurement in measurements:
+        prediction_Systematic    = predictorPF_Systematic.predict(priorPF_Systematic, timestamp = measurement.timestamp)
+        hypothesis_Systematic    = SingleHypothesis(prediction_Systematic, measurement)
+        post_Systematic          = updaterPF_Systematic.update(hypothesis_Systematic)
+        priorPF_Systematic       = post_Systematic
+        errorPF_Systematic[:,kTime,mc] = np.array(truth.states[kTime].state_vector).T - np.array(post_Systematic.mean).T
+        statePF_Systematic[:,kTime,mc] = np.array(post_Systematic.mean).T
+        covPF_Systematic[:,:,kTime,mc] = np.matrix(post_Systematic.covar)
+        neesPF_Systematic[:,kTime,mc]  = errorPF_Systematic[:,kTime,mc].reshape(1,nS) @ np.linalg.pinv(covPF_Systematic[:,:,kTime,mc]) @ errorPF_Systematic[:,kTime,mc].reshape(nS,1)
+        kTime                    += 1
+    end_time_Systematic[mc] = time.time()
+    del prediction_Systematic, hypothesis_Systematic, post_Systematic, priorPF_Systematic, samplesPF_Systematic
 
 
 
     # Pick best and use with and without ESS
     
     
-    #### Run UKF ####
-    start_time_UKF[mc] = time.time()
-    kTime      = 0
-    for measurement in measurements:
-        prediction           = predictorUKF.predict(priorUKF, timestamp = measurement.timestamp)
-        hypothesis           = SingleHypothesis(prediction, measurement)
-        post                 = updaterUKF.update(hypothesis)
-        priorUKF            = post
-        errorUKF[:,kTime,mc] = np.array(truth.states[kTime].state_vector).T - post.mean.T
-        stateUKF[:,kTime,mc] = post.mean.T
-        covUKF[:,:,kTime,mc] = np.matrix(post.covar)
-        neesUKF[:,kTime,mc]  = errorUKF[:,kTime,mc].reshape(1,nS) @ np.linalg.pinv(covUKF[:,:,kTime,mc]) @ errorUKF[:,kTime,mc].reshape(nS,1)
-        kTime               += 1
-    end_time_UKF[mc] = time.time()
+    # #### Run UKF ####
+    # start_time_UKF[mc] = time.time()
+    # kTime      = 0
+    # for measurement in measurements:
+    #     prediction           = predictorUKF.predict(priorUKF, timestamp = measurement.timestamp)
+    #     hypothesis           = SingleHypothesis(prediction, measurement)
+    #     post                 = updaterUKF.update(hypothesis)
+    #     priorUKF            = post
+    #     errorUKF[:,kTime,mc] = np.array(truth.states[kTime].state_vector).T - post.mean.T
+    #     stateUKF[:,kTime,mc] = post.mean.T
+    #     covUKF[:,:,kTime,mc] = np.matrix(post.covar)
+    #     neesUKF[:,kTime,mc]  = errorUKF[:,kTime,mc].reshape(1,nS) @ np.linalg.pinv(covUKF[:,:,kTime,mc]) @ errorUKF[:,kTime,mc].reshape(nS,1)
+    #     kTime               += 1
+    # end_time_UKF[mc] = time.time()
 
-    del prediction, hypothesis, post
+    # del prediction, hypothesis, post
 
 
 #### Plotting ####
@@ -401,7 +394,7 @@ data_3 = np.mean(np.sqrt(np.mean(errorPF_Systematic[[0, 2], :, :]**2, axis=0)), 
 data_4 = np.mean(np.sqrt(np.mean(errorPF_Residual[[0, 2], :, :]**2, axis=0)), axis=0)
 data_5 = np.mean(np.sqrt(np.mean(errorPF_Strat[[0, 2], :, :]**2, axis=0)), axis=0)
 data_6 = np.mean(np.sqrt(np.mean(errorUKF[[0, 2], :, :]**2, axis=0)), axis=0)
-data = [data_1, data_2, data_3, data_4, data_5, data_6]
+data = [data_1, data_2, data_3]
 bp     =  axs[0].boxplot(data,patch_artist = True,
                     boxprops = dict(facecolor = translucent_blue,color = cb_colors['neutral'],linewidth = 2),
                     medianprops = dict(color = cb_colors['upper'],linewidth = 2))
@@ -409,10 +402,10 @@ axs[0].minorticks_on()
 axs[0].tick_params(which='both', width=2)
 axs[0].tick_params(which='major', length=7)
 axs[0].tick_params(which='minor', length=4)
-axs[0].set_xticks([1, 2, 3, 4, 5, 6])
-axs[0].set_xticklabels(['GMF', 'PMF', 'Sys', 'Res', 'Strat','UKF'])
+axs[0].set_xticks([1, 2, 3])
+axs[0].set_xticklabels(['GMF', 'PMF', 'Sys'])
 axs[0].set_ylabel(r'\textbf{RMSE} Position (m)')
-axs[0].set_ylim([25, 75])
+#axs[0].set_ylim([25, 75])
 
 # RMSE Velocity
 data_1 = np.mean(np.sqrt(np.mean(errorGMF[[1, 3], :, :]**2, axis=0)), axis=0)
@@ -421,7 +414,7 @@ data_3 = np.mean(np.sqrt(np.mean(errorPF_Systematic[[1, 3], :, :]**2, axis=0)), 
 data_4 = np.mean(np.sqrt(np.mean(errorPF_Residual[[1, 3], :, :]**2, axis=0)), axis=0)
 data_5 = np.mean(np.sqrt(np.mean(errorPF_Strat[[1, 3], :, :]**2, axis=0)), axis=0)
 data_6 = np.mean(np.sqrt(np.mean(errorUKF[[1, 3], :, :]**2, axis=0)), axis=0)
-data = [data_1, data_2, data_3, data_4, data_5, data_6]
+data = [data_1, data_2, data_3]
 bp     =  axs[1].boxplot(data,patch_artist = True,
                     boxprops = dict(facecolor = translucent_blue,color = cb_colors['neutral'],linewidth = 2),
                     medianprops = dict(color = cb_colors['upper'],linewidth = 2))
@@ -429,10 +422,10 @@ axs[1].minorticks_on()
 axs[1].tick_params(which='both', width=2)
 axs[1].tick_params(which='major', length=7)
 axs[1].tick_params(which='minor', length=4)
-axs[1].set_xticks([1, 2, 3, 4, 5, 6])
-axs[1].set_xticklabels(['GMF', 'PMF', 'Sys', 'Res', 'Strat','UKF'])
+axs[1].set_xticks([1, 2, 3])
+axs[1].set_xticklabels(['GMF', 'PMF', 'Sys'])
 axs[1].set_ylabel(r'\textbf{RMSE} Velocity (m/s)')
-axs[1].set_ylim([5, 15])
+#axs[1].set_ylim([5, 15])
 
 # SNEES Position
 data_1 =  np.median(neesGMF,axis = 1)[0]/nS
@@ -441,7 +434,7 @@ data_3 =  np.median(neesPF_Systematic,axis = 1)[0]/nS
 data_4 =  np.median(neesPF_Residual,axis = 1)[0]/nS
 data_5 =  np.median(neesPF_Strat,axis = 1)[0]/nS
 data_6 =  np.median(neesUKF,axis = 1)[0]/nS
-data = [data_1, data_2, data_3, data_4, data_5, data_6]
+data = [data_1, data_2, data_3]
 bp     =  axs[2].boxplot(data,patch_artist = True,
                     boxprops = dict(facecolor = translucent_blue,color = cb_colors['neutral'],linewidth = 2),
                     medianprops = dict(color = cb_colors['upper'],linewidth = 2))
@@ -449,10 +442,10 @@ axs[2].minorticks_on()
 axs[2].tick_params(which='both', width=2)
 axs[2].tick_params(which='major', length=7)
 axs[2].tick_params(which='minor', length=4)
-axs[2].set_xticks([1, 2, 3, 4, 5, 6])
-axs[2].set_xticklabels(['GMF', 'PMF', 'Sys', 'Res', 'Strat','UKF'])
+axs[2].set_xticks([1, 2, 3])
+axs[2].set_xticklabels(['GMF', 'PMF', 'Sys'])
 axs[2].set_ylabel(r'\textbf{SNEES} Position')
-axs[2].set_ylim([0.3, 0.8])
+#axs[2].set_ylim([0.3, 0.8])
 
 fig.savefig("STATS_LOW_FLAT.pdf", format='pdf', dpi=1000, bbox_inches='tight')
 
@@ -465,8 +458,8 @@ mean_time_Systematic = np.mean(end_time_Systematic - start_time_Systematic)/nTim
 mean_time_UKF = np.mean(end_time_UKF - start_time_UKF)/nTime
 
 # Create a list of the mean times and filter labels
-mean_times = [mean_time_GMF, mean_time_PMF, mean_time_Strat, mean_time_Residual, mean_time_Systematic, mean_time_UKF]
-filters = ['GMF', 'PMF', 'Sys', 'Res', 'Strat','UKF']
+mean_times = [mean_time_GMF, mean_time_PMF, mean_time_Systematic]
+filters = ['GMF', 'PMF', 'Sys']
 
 # Create the bar plot
 fig, ax = plt.subplots(figsize=(8, 6))
