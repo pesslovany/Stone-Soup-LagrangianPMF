@@ -5,7 +5,6 @@ import plotly.io as pio
 from scipy.interpolate import RegularGridInterpolator
 from scipy.signal import fftconvolve
 from stonesoup.functions import grid_creation
-from stonesoup.functions import circumscribe_intersection
 from stonesoup.types.state import PointMassState
 from scipy.special import erfc
 
@@ -74,18 +73,18 @@ class PointMassPredictor(Predictor):
             if runGSFversion:
         
                 # Normalize weights and take every second element
-                wbark = prior.weight[::3]  
+                wbark = prior.weight[::2]  
                 wbark /= np.sum(wbark)  # Re-normalize after subsampling
                 
                 # Dimensions
                 s, n = prior.state_vector.shape
-                n = n // 3 + 1# Adjust n after taking every second element
+                n = n // 2 + 1# Adjust n after taking every second element
                 R = np.array(np.matrix(measModel.covar()))
                 ny = R.shape[0]
                 eye_s = np.eye(s)
                 
                 # Predicted state mean and covariance components (every second column)
-                Xbark = F @ prior.state_vector[:, ::3]
+                Xbark = F @ prior.state_vector[:, ::2]
 
                 prior.state_vector = Xbark
                 xbark              = Xbark @ wbark
