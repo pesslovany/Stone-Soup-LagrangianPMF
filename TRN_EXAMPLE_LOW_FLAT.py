@@ -487,23 +487,3 @@ fig.savefig("TIME_LOW_FLAT.pdf", format='pdf', dpi=1000, bbox_inches='tight')
 # Show the plot
 plt.tight_layout()
 plt.show()
-
-a = np.load("posPMF.npy")
-aa = np.load("velPMF.npy")
-aaa = np.load("annesPMF.npy")
-aaaa = np.load("timePMF.npy")
-
-b = np.load("posGMF.npy")
-bb = np.load("velGMF.npy")
-bbb = np.load("annesGMF.npy")
-bbbb = np.load("timeGMF.npy")
-
-
-c = np.load("posPF.npy")
-cc = np.load("velPF.npy")
-ccc = np.load("annesPF.npy")
-cccc = np.load("timePF.npy")
-
-print(np.mean(a[0:19]))
-print(np.mean(b[0:19]))
-print(np.mean(c[0:19]))
