@@ -12,6 +12,7 @@ from ..base import Property
 from ..types.array import StateVectors
 from .base import Predictor
 from scipy.linalg import inv
+import math
 
 pio.renderers.default = "browser"
 
@@ -78,7 +79,7 @@ class PointMassPredictor(Predictor):
                 
                 # Dimensions
                 s, n = prior.state_vector.shape
-                n = n // 2 + 1# Adjust n after taking every second element
+                n = math.ceil(n / 2) # Adjust n after taking every second element
                 R = np.array(np.matrix(measModel.covar()))
                 ny = R.shape[0]
                 eye_s = np.eye(s)
@@ -138,11 +139,6 @@ class PointMassPredictor(Predictor):
                 measMean = invF @ xhatk
                 matrixForEig = invF @ Phatk @ np.linalg.inv(F.T) + Q
                 
-                #alpha = 1 - 0.5 * erfc(self.sFactor / np.sqrt(s))
-            
-                #measMean, matrixForEig = circumscribe_intersection(prior.mean.reshape(-1, 1), prior.covar(), newMeasMeanInOldSpace, newMeasVarInOldSpace, alpha)
-                #matrixForEig = matrixForEig + Q;
-
                 measGridNew, GridDeltaOld, gridDimOld, nothing, eigVect = grid_creation(
                     measMean,
                     matrixForEig,
