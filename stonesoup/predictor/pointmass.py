@@ -74,25 +74,26 @@ class PointMassPredictor(Predictor):
             if runGSFversion:
         
                 # Normalize weights and take every second element
-                wbark = prior.weight[::2]  
+                nEle  = 1
+                wbark = prior.weight[::nEle]  
                 wbark /= np.sum(wbark)  # Re-normalize after subsampling
                 
                 # Dimensions
                 s, n = prior.state_vector.shape
-                n = math.ceil(n / 2) # Adjust n after taking every second element
+                n = math.ceil(n / nEle) # Adjust n after taking every second element
                 R = np.array(np.matrix(measModel.covar()))
                 ny = R.shape[0]
                 eye_s = np.eye(s)
                 
                 # Predicted state mean and covariance components (every second column)
-                Xbark = F @ prior.state_vector[:, ::2]
+                Xbark = F @ prior.state_vector[:, ::nEle]
 
                 prior.state_vector = Xbark
                 xbark              = Xbark @ wbark
                 chip_              = Xbark - xbark[:, None]
                 
                 # Compute Ps using optimal weighting
-                alpha  = 0.5 # Adjust if needed
+                alpha  = 1 # Adjust if needed
                 Ps     = alpha * (4 / (n * (s + 2)))**(2 / (s + 4)) * (chip_ * wbark) @ chip_.T + Q # Silverman's rule of thumb
                 Ps     = (Ps + Ps.T) / 2
                 

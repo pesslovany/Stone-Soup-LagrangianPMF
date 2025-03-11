@@ -5,6 +5,7 @@ import time
 
 from datetime import datetime
 from datetime import timedelta
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes, mark_inset
 
 # Initialise Stone Soup ground-truth and transition models.
 from stonesoup.models.transition.linear import KnownTurnRate, ConstantVelocity, CombinedLinearGaussianTransitionModel
@@ -41,18 +42,15 @@ from stonesoup.types.array import StateVectors
 
 ######################## Dynamics Setup ########################
 # Define starting position
-rx0                   = 60000
-ry0                   = 35000
-# Define speed ranges (excluding values near 0)
-speed_ranges          = [(-70, -50), (50, 70)]
+turnRate              = -np.deg2rad(0.25)
+X0                    = np.array([80000,75,35000,0])
+P0                    = np.diag([100,20,100,20])
 # Define turn rate ranges (excluding values near 0)
-turn_rate_ranges      = [(-np.deg2rad(0.2), -np.deg2rad(0.1)), (np.deg2rad(0.1), np.deg2rad(0.2))]
 deltaT                = 2
-nTime                 = 150
-P0                    = np.diag([15,10,15,10])**2
-Qn                    = 0.005
+nTime                 = 100
+Qn                    = 0.001
 nS                    = 4
-MC                    = 20
+MC                    = 100
 
 ######################## Measurement Setup ########################
 # Import map
@@ -61,7 +59,7 @@ map_x                 = np.array(data['map_m'][0][0][0])
 map_y                 = np.array(data['map_m'][0][0][1])
 map_z                 = np.matrix(data['map_m'][0][0][2])
 interpolator          = RegularGridInterpolator((map_x[:,0],map_y[0,:]),map_z)
-Rmap                  = 0.5
+Rmap                  = 1
 measurement_model     = TerrainAidedNavigation(interpolator,noise_covar = Rmap, mapping=(0, 2))
 
 ######################## Initialize Arrays ########################
@@ -80,16 +78,6 @@ errorUKF              = np.zeros(shape = (nS, nTime, MC))
 stateUKF              = np.zeros(shape = (nS, nTime, MC))
 covUKF                = np.zeros(shape = (nS, nS, nTime, MC))
 neesUKF               = np.zeros(shape = (1, nTime, MC))
-# Initialize result variables for Stratified Particle Filter
-errorPF_Strat         = np.zeros((nS, nTime, MC))
-statePF_Strat         = np.zeros((nS, nTime, MC))
-covPF_Strat           = np.zeros((nS, nS, nTime, MC))
-neesPF_Strat          = np.zeros((1, nTime, MC))
-# Initialize result variables for Residual Particle Filter
-errorPF_Residual      = np.zeros((nS, nTime, MC))
-statePF_Residual      = np.zeros((nS, nTime, MC))
-covPF_Residual        = np.zeros((nS, nS, nTime, MC))
-neesPF_Residual       = np.zeros((1, nTime, MC))
 # Initialize result variables for Systematic Particle Filter
 errorPF_Systematic    = np.zeros((nS, nTime, MC))
 statePF_Systematic    = np.zeros((nS, nTime, MC))
@@ -98,15 +86,11 @@ neesPF_Systematic     = np.zeros((1, nTime, MC))
 # Preallocate the end timing arrays for each method
 end_time_GMF          = np.zeros(MC)
 end_time_PMF          = np.zeros(MC)
-end_time_Strat        = np.zeros(MC)
-end_time_Residual     = np.zeros(MC)
 end_time_Systematic   = np.zeros(MC)
 end_time_UKF          = np.zeros(MC)
 # Preallocate the start timing arrays for each method
 start_time_GMF        = np.zeros(MC)
 start_time_PMF        = np.zeros(MC)
-start_time_Strat      = np.zeros(MC)
-start_time_Residual   = np.zeros(MC)
 start_time_Systematic = np.zeros(MC)
 start_time_UKF        = np.zeros(MC)
 
@@ -117,13 +101,6 @@ for mc in range(0,MC):
     # Set seed
     np.random.seed(mc)
     print(mc)
-    # Select one of the speed ranges randomly
-    speed_range         = speed_ranges[np.random.choice([0, 1])]
-    random_speed        = np.random.uniform(speed_range[0], speed_range[1])
-    # Select one of the turn rate ranges randomly
-    turn_rate_range     = turn_rate_ranges[np.random.choice([0, 1])]
-    turnRate            = np.random.uniform(turn_rate_range[0], turn_rate_range[1])
-    X0                  = np.array([rx0,random_speed,ry0,0])
     
     ############################ Run truth trajectory ########################
     # Truth settings
@@ -154,6 +131,12 @@ for mc in range(0,MC):
         hypothesis           = SingleHypothesis(prediction, measurement)
         post                 = updaterUKF.update(hypothesis)
         priorUKF             = post
+        if np.isnan(post.mean[0]):
+            errorUKF[:,kTime:-1,mc] = 1e3
+            stateUKF[:,kTime:-1,mc] = 1e3
+            covUKF[:,:,kTime:-1,mc] = 1e3
+            neesUKF[:,kTime:-1,mc]  = 1e3
+            break
         errorUKF[:,kTime,mc] = np.array(truth.states[kTime].state_vector).T - post.mean.T
         stateUKF[:,kTime,mc] = post.mean.T
         covUKF[:,:,kTime,mc] = np.matrix(post.covar)
@@ -166,7 +149,7 @@ for mc in range(0,MC):
     # Initialize PMF+GSF
     predictorGMF        = PointMassPredictor(transition_model)
     updaterGMF          = PointMassUpdater(measurement_model)
-    Npa                 = np.array([9, 7, 9, 7]) # for FFT must be ODD!!!!
+    Npa                 = np.array([7, 5, 7, 5]) # for FFT must be ODD!!!!
     N                   = np.prod(Npa) # number of points - total
     sFactor             = 5 # scaling factor (number of sigmas covered by the grid)
     [predGrid, predGridDelta, gridDimOld, xOld, Ppold] = grid_creation(np.vstack(X0),P0,sFactor,nS,Npa)
@@ -195,6 +178,11 @@ for mc in range(0,MC):
         post                 = updaterGMF.update(hypothesis)
         priorGMF             = post
         if np.isnan(post.mean[0]):
+            print('GMF')
+            errorGMF[:,kTime:-1,mc] = 1e3
+            stateGMF[:,kTime:-1,mc] = 1e3
+            covGMF[:,:,kTime:-1,mc] = 1e3
+            neesGMF[:,kTime:-1,mc]  = 1e3
             break
         errorGMF[:,kTime,mc] = np.array(truth.states[kTime].state_vector).T - post.mean
         stateGMF[:,kTime,mc] = post.mean
@@ -208,7 +196,7 @@ for mc in range(0,MC):
     # Initialize PMF
     predictorPMF        = PointMassPredictor(transition_model)
     updaterPMF          = PointMassUpdater(measurement_model)
-    Npa                 = np.array([9, 9, 9, 9]) # for FFT must be ODD!!!!
+    Npa                 = np.array([7, 7, 7, 7]) # for FFT must be ODD!!!!
     N                   = np.prod(Npa) # number of points - total
     sFactor             = 5 # scaling factor (number of sigmas covered by the grid)
     [predGrid, predGridDelta, gridDimOld, xOld, Ppold] = grid_creation(np.vstack(X0),P0,sFactor,nS,Npa)
@@ -237,6 +225,11 @@ for mc in range(0,MC):
         post                 = updaterPMF.update(hypothesis)
         priorPMF             = post
         if np.isnan(post.mean[0]):
+            print('PMF')
+            errorPMF[:,kTime:-1,mc] = 1e3
+            statePMF[:,kTime:-1,mc] = 1e3
+            covPMF[:,:,kTime:-1,mc] = 1e3
+            neesPMF[:,kTime:-1,mc]  = 1e3
             break
         errorPMF[:,kTime,mc] = np.array(truth.states[kTime].state_vector).T - post.mean
         statePMF[:,kTime,mc] = post.mean
@@ -263,6 +256,12 @@ for mc in range(0,MC):
         prediction                      = predictorPF_Systematic.predict(priorPF_Systematic, timestamp = measurement.timestamp)
         hypothesis                      = SingleHypothesis(prediction, measurement)
         post                            = updaterPF_Systematic.update(hypothesis)
+        if np.isnan(post.mean[0]):
+            errorPF_Systematic[:,kTime:-1,mc] = 1e3
+            statePF_Systematic[:,kTime:-1,mc] = 1e3
+            covPF_Systematic[:,:,kTime:-1,mc] = 1e3
+            neesPF_Systematic[:,kTime:-1,mc]  = 1e3
+            break
         priorPF_Systematic              = post
         errorPF_Systematic[:,kTime,mc]  = np.array(truth.states[kTime].state_vector).T - np.array(post.mean).T
         statePF_Systematic[:,kTime,mc]  = np.array(post.mean).T
@@ -301,10 +300,8 @@ data_2 = np.mean(np.sqrt(np.mean(errorPMF[[0, 2], :, :]**2, axis=0)), axis=0)
 print(np.mean(data_2))
 data_3 = np.mean(np.sqrt(np.mean(errorPF_Systematic[[0, 2], :, :]**2, axis=0)), axis=0)
 print(np.mean(data_3))
-data_4 = np.mean(np.sqrt(np.mean(errorPF_Residual[[0, 2], :, :]**2, axis=0)), axis=0)
-data_5 = np.mean(np.sqrt(np.mean(errorPF_Strat[[0, 2], :, :]**2, axis=0)), axis=0)
-data_6 = np.mean(np.sqrt(np.mean(errorUKF[[0, 2], :, :]**2, axis=0)), axis=0)
-data   = [data_1, data_2, data_3, data_6]
+data_4 = np.mean(np.sqrt(np.mean(errorUKF[[0, 2], :, :]**2, axis=0)), axis=0)
+data   = [data_1, data_2, data_3, data_4]
 bp     =  axs[0].boxplot(data,patch_artist = True,
                     boxprops = dict(facecolor = translucent_blue,color = cb_colors['neutral'],linewidth = 2),
                     medianprops = dict(color = cb_colors['upper'],linewidth = 2))
@@ -315,14 +312,20 @@ axs[0].tick_params(which='minor', length=4)
 axs[0].set_xticks([1, 2, 3, 4])
 axs[0].set_xticklabels(['GMF', 'PMF', 'Sys', 'UKF'])
 axs[0].set_ylabel(r'\textbf{RMSE} Position (m)') # axs[0].set_ylim([25, 75]) # np.save("posPMF.npy", data_2)
+# Create inset for RMSE Position
+axins0 = inset_axes(axs[0], width="50%", height="50%", loc='upper left', borderpad=2)
+bp_ins = axins0.boxplot(data, patch_artist=True,
+                        boxprops=dict(facecolor=translucent_blue, color=cb_colors['neutral'], linewidth=2),
+                        medianprops=dict(color=cb_colors['upper'], linewidth=2))
+axins0.set_ylim([0, 10])
+axins0.set_xticks([])
+axins0.yaxis.tick_right() 
 # RMSE Velocity
 data_1 = np.mean(np.sqrt(np.mean(errorGMF[[1, 3], :, :]**2, axis=0)), axis=0)
 data_2 = np.mean(np.sqrt(np.mean(errorPMF[[1, 3], :, :]**2, axis=0)), axis=0)
 data_3 = np.mean(np.sqrt(np.mean(errorPF_Systematic[[1, 3], :, :]**2, axis=0)), axis=0)
-data_4 = np.mean(np.sqrt(np.mean(errorPF_Residual[[1, 3], :, :]**2, axis=0)), axis=0)
-data_5 = np.mean(np.sqrt(np.mean(errorPF_Strat[[1, 3], :, :]**2, axis=0)), axis=0)
-data_6 = np.mean(np.sqrt(np.mean(errorUKF[[1, 3], :, :]**2, axis=0)), axis=0)
-data   = [data_1, data_2, data_3, data_6]
+data_4 = np.mean(np.sqrt(np.mean(errorUKF[[1, 3], :, :]**2, axis=0)), axis=0)
+data   = [data_1, data_2, data_3, data_4]
 bp     =  axs[1].boxplot(data,patch_artist = True,
                     boxprops = dict(facecolor = translucent_blue,color = cb_colors['neutral'],linewidth = 2),
                     medianprops = dict(color = cb_colors['upper'],linewidth = 2))
@@ -333,14 +336,19 @@ axs[1].tick_params(which='minor', length=4)
 axs[1].set_xticks([1, 2, 3, 4])
 axs[1].set_xticklabels(['GMF', 'PMF', 'Sys', 'UKF'])
 axs[1].set_ylabel(r'\textbf{RMSE} Velocity (m/s)') #axs[1].set_ylim([5, 15]) #np.save("velPMF.npy", data_2)
+axins1 = inset_axes(axs[1], width="50%", height="50%", loc='upper left', borderpad=2)
+bp_ins = axins1.boxplot(data, patch_artist=True,
+                        boxprops=dict(facecolor=translucent_blue, color=cb_colors['neutral'], linewidth=2),
+                        medianprops=dict(color=cb_colors['upper'], linewidth=2))
+axins1.set_ylim([0, 1])
+axins1.set_xticks([])
+axins1.yaxis.tick_right() 
 # SNEES
 data_1 = np.median(neesGMF,axis = 1)[0]/nS
 data_2 = np.median(neesPMF,axis = 1)[0]/nS
 data_3 = np.median(neesPF_Systematic,axis = 1)[0]/nS
-data_4 = np.median(neesPF_Residual,axis = 1)[0]/nS
-data_5 = np.median(neesPF_Strat,axis = 1)[0]/nS
-data_6 = np.median(neesUKF,axis = 1)[0]/nS
-data   = [data_1, data_2, data_3, data_6]
+data_4 = np.median(neesUKF,axis = 1)[0]/nS
+data   = [data_1, data_2, data_3, data_4]
 bp     =  axs[2].boxplot(data,patch_artist = True,
                     boxprops = dict(facecolor = translucent_blue,color = cb_colors['neutral'],linewidth = 2),
                     medianprops = dict(color = cb_colors['upper'],linewidth = 2))
@@ -351,14 +359,18 @@ axs[2].tick_params(which='minor', length=4)
 axs[2].set_xticks([1, 2, 3, 4])
 axs[2].set_xticklabels(['GMF', 'PMF', 'Sys', 'UKF'])
 axs[2].set_ylabel(r'\textbf{SNEES} Position') #axs[2].set_ylim([0.3, 0.8]) #np.save("annesPMF.npy", data_2) # fig.savefig("STATS_LOW_FLAT.pdf", format='pdf', dpi=1000, bbox_inches='tight')
-plt.tight_layout()
+axins2 = inset_axes(axs[2], width="50%", height="50%", loc='upper left', borderpad=2)
+bp_ins = axins2.boxplot(data, patch_artist=True,
+                        boxprops=dict(facecolor=translucent_blue, color=cb_colors['neutral'], linewidth=2),
+                        medianprops=dict(color=cb_colors['upper'], linewidth=2))
+axins2.set_ylim([0, 10])
+axins2.set_xticks([])
+axins2.yaxis.tick_right() 
 
 ############################ Time ############################
 # Calculate the mean times for each filter method
 mean_time_GMF           = np.mean(end_time_GMF - start_time_GMF)/nTime
 mean_time_PMF           = np.mean(end_time_PMF - start_time_PMF)/nTime
-mean_time_Strat         = np.mean(end_time_Strat - start_time_Strat)/nTime
-mean_time_Residual      = np.mean(end_time_Residual - start_time_Residual)/nTime
 mean_time_Systematic    = np.mean(end_time_Systematic - start_time_Systematic)/nTime
 mean_time_UKF           = np.mean(end_time_UKF - start_time_UKF)/nTime
 # Create a list of the mean times and filter labels
@@ -372,5 +384,4 @@ ax.set_xlabel('Filter Method', fontsize=14)
 ax.set_ylabel('Mean Time (s)', fontsize=14)
 ax.set_title('Mean Time for Each Filter Method', fontsize=16) # fig.savefig("TIME_LOW_FLAT.pdf", format='pdf', dpi=1000, bbox_inches='tight') #np.save("timePMF.npy", data_2)
 # Show the plot
-plt.tight_layout()
 plt.show()
