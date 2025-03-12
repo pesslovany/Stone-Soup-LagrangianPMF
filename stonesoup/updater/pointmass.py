@@ -53,11 +53,16 @@ class PointMassUpdater(Updater):
         pdf_value = multivariate_normal.pdf(
             x.T, np.ravel(hypothesis.measurement.state_vector), R
         )  # likelihood
-        new_weight = np.ravel(hypothesis.prediction.weight) * np.ravel(pdf_value)
+        # new_weight = np.ravel(hypothesis.prediction.weight) * np.ravel(pdf_value)
 
-        new_weight = new_weight / (
-            np.prod(hypothesis.prediction.grid_delta) * sum(new_weight)
-        )  # Normalization
+        # new_weight = new_weight / (
+        #     np.prod(hypothesis.prediction.grid_delta) * sum(new_weight)
+        # )  # Normalization
+
+        new_weight = np.log(np.ravel(hypothesis.prediction.weight) + 10**(-15)) + np.log(np.ravel(pdf_value) + 10**(-15))
+        mmax       = np.max(new_weight)
+        new_weight = np.exp(new_weight - (mmax + np.log(np.sum(np.exp(new_weight - mmax)))))
+        new_weight = new_weight / (np.prod(hypothesis.prediction.grid_delta) * sum(new_weight))
 
         predicted_state = PointMassState(
             state_vector=hypothesis.prediction.state_vector,

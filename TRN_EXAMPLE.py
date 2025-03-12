@@ -42,13 +42,14 @@ from stonesoup.types.array import StateVectors
 
 ######################## Dynamics Setup ########################
 # Define starting position
-turnRate              = -np.deg2rad(0.25)
-X0                    = np.array([80000,75,35000,0])
-P0                    = np.diag([100,20,100,20])
+vRanges               = [(-70, -50), (50, 70)]
+trRanges              = [(-np.deg2rad(0.2), -np.deg2rad(0.1)), (np.deg2rad(0.1), np.deg2rad(0.2))]
+r0                    = np.array([60000,35000])
+P0                    = np.diag([120,20,120,20])
 # Define turn rate ranges (excluding values near 0)
 deltaT                = 2
 nTime                 = 100
-Qn                    = 0.001
+Qn                    = 1e-1
 nS                    = 4
 MC                    = 100
 
@@ -59,8 +60,8 @@ map_x                 = np.array(data['map_m'][0][0][0])
 map_y                 = np.array(data['map_m'][0][0][1])
 map_z                 = np.matrix(data['map_m'][0][0][2])
 interpolator          = RegularGridInterpolator((map_x[:,0],map_y[0,:]),map_z)
-Rmap                  = 1
-measurement_model     = TerrainAidedNavigation(interpolator,noise_covar = Rmap, mapping=(0, 2))
+Rmap                  = 0.5
+measurement_model     = TerrainAidedNavigation(interpolator,noise_covar = Rmap, mapping = (0, 2))
 
 ######################## Initialize Arrays ########################
 # Initialize result variables for PMF+GSF
@@ -103,6 +104,12 @@ for mc in range(0,MC):
     print(mc)
     
     ############################ Run truth trajectory ########################
+    # True state
+    vRange              = vRanges[np.random.choice([0, 1])]
+    v0                  = np.random.uniform(vRange[0], vRange[1])
+    trRange             = trRanges[np.random.choice([0, 1])]
+    turnRate            = np.random.uniform(trRange[0], trRange[1])
+    X0                  = np.array([r0[0],v0,r0[1],0])
     # Truth settings
     start_time          = datetime.now().replace(microsecond=0)
     transition_model    = KnownTurnRate(turn_noise_diff_coeffs = [Qn,Qn], turn_rate = turnRate)
@@ -149,9 +156,9 @@ for mc in range(0,MC):
     # Initialize PMF+GSF
     predictorGMF        = PointMassPredictor(transition_model)
     updaterGMF          = PointMassUpdater(measurement_model)
-    Npa                 = np.array([7, 5, 7, 5]) # for FFT must be ODD!!!!
-    N                   = np.prod(Npa) # number of points - total
-    sFactor             = 5 # scaling factor (number of sigmas covered by the grid)
+    Npa                 = np.array([9, 7, 9, 7])    # for FFT must be ODD!!!!
+    N                   = np.prod(Npa)              # number of points - total
+    sFactor             = 5                         # scaling factor (number of sigmas covered by the grid)
     [predGrid, predGridDelta, gridDimOld, xOld, Ppold] = grid_creation(np.vstack(X0),P0,sFactor,nS,Npa)
     meanX0              = np.vstack(X0)
     pom                 = predGrid - np.tile(meanX0, (1, N))
@@ -196,7 +203,7 @@ for mc in range(0,MC):
     # Initialize PMF
     predictorPMF        = PointMassPredictor(transition_model)
     updaterPMF          = PointMassUpdater(measurement_model)
-    Npa                 = np.array([7, 7, 7, 7]) # for FFT must be ODD!!!!
+    Npa                 = np.array([9, 9, 9, 9]) # for FFT must be ODD!!!!
     N                   = np.prod(Npa) # number of points - total
     sFactor             = 5 # scaling factor (number of sigmas covered by the grid)
     [predGrid, predGridDelta, gridDimOld, xOld, Ppold] = grid_creation(np.vstack(X0),P0,sFactor,nS,Npa)
@@ -241,7 +248,7 @@ for mc in range(0,MC):
     del prediction, hypothesis, post, priorPMF, predDensityProb, predGrid
     
     # Initialize PF-Systematic
-    nParticles_Sys              = np.round(2.5*N).astype(int)
+    nParticles_Sys              = np.round(3*N).astype(int)
     predictorPF_Systematic      = ParticlePredictor(transition_model)
     resamplerPF_Systematic      = SystematicResampler()
     resamplerPF_Systematic      = ESSResampler(threshold = nParticles_Sys*0.8, resampler = resamplerPF_Systematic)
@@ -317,7 +324,7 @@ axins0 = inset_axes(axs[0], width="50%", height="50%", loc='upper left', borderp
 bp_ins = axins0.boxplot(data, patch_artist=True,
                         boxprops=dict(facecolor=translucent_blue, color=cb_colors['neutral'], linewidth=2),
                         medianprops=dict(color=cb_colors['upper'], linewidth=2))
-axins0.set_ylim([0, 10])
+axins0.set_ylim([4, 10])
 axins0.set_xticks([])
 axins0.yaxis.tick_right() 
 # RMSE Velocity
@@ -363,7 +370,7 @@ axins2 = inset_axes(axs[2], width="50%", height="50%", loc='upper left', borderp
 bp_ins = axins2.boxplot(data, patch_artist=True,
                         boxprops=dict(facecolor=translucent_blue, color=cb_colors['neutral'], linewidth=2),
                         medianprops=dict(color=cb_colors['upper'], linewidth=2))
-axins2.set_ylim([0, 10])
+axins2.set_ylim([0, 5])
 axins2.set_xticks([])
 axins2.yaxis.tick_right() 
 
