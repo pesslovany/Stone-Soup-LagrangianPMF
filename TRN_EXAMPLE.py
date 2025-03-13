@@ -1,3 +1,4 @@
+# %%
 # Import the necessary libraries
 import numpy as np
 import matplotlib.pyplot as plt
@@ -5,7 +6,7 @@ import time
 
 from datetime import datetime
 from datetime import timedelta
-from mpl_toolkits.axes_grid1.inset_locator import inset_axes, mark_inset
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
 # Initialise Stone Soup ground-truth and transition models.
 from stonesoup.models.transition.linear import KnownTurnRate, ConstantVelocity, CombinedLinearGaussianTransitionModel
@@ -40,6 +41,10 @@ from stonesoup.types.numeric import Probability  # Similar to a float type
 from stonesoup.types.state import ParticleState
 from stonesoup.types.array import StateVectors
 
+from stonesoup.plotter import AnimatedPlotterly
+import plotly.io as pio
+pio.renderers.default = "vscode"
+
 ######################## Dynamics Setup ########################
 # Define starting position
 vRanges               = [(-70, -50), (50, 70)]
@@ -47,11 +52,11 @@ trRanges              = [(-np.deg2rad(0.2), -np.deg2rad(0.1)), (np.deg2rad(0.1),
 r0                    = np.array([60000,35000])
 P0                    = np.diag([120,20,120,20])
 # Define turn rate ranges (excluding values near 0)
-deltaT                = 2
-nTime                 = 100
-Qn                    = 1e-1
+deltaT                = 3
+nTime                 = 150
+Qn                    = 1e-3
 nS                    = 4
-MC                    = 100
+MC                    = 1
 
 ######################## Measurement Setup ########################
 # Import map
@@ -80,19 +85,19 @@ stateUKF              = np.zeros(shape = (nS, nTime, MC))
 covUKF                = np.zeros(shape = (nS, nS, nTime, MC))
 neesUKF               = np.zeros(shape = (1, nTime, MC))
 # Initialize result variables for Systematic Particle Filter
-errorPF_Systematic    = np.zeros((nS, nTime, MC))
-statePF_Systematic    = np.zeros((nS, nTime, MC))
-covPF_Systematic      = np.zeros((nS, nS, nTime, MC))
-neesPF_Systematic     = np.zeros((1, nTime, MC))
+errorPFS              = np.zeros((nS, nTime, MC))
+statePFS              = np.zeros((nS, nTime, MC))
+covPFS                = np.zeros((nS, nS, nTime, MC))
+neesPFS               = np.zeros((1, nTime, MC))
 # Preallocate the end timing arrays for each method
 end_time_GMF          = np.zeros(MC)
 end_time_PMF          = np.zeros(MC)
-end_time_Systematic   = np.zeros(MC)
+end_time_PFS          = np.zeros(MC)
 end_time_UKF          = np.zeros(MC)
 # Preallocate the start timing arrays for each method
 start_time_GMF        = np.zeros(MC)
 start_time_PMF        = np.zeros(MC)
-start_time_Systematic = np.zeros(MC)
+start_time_PFS        = np.zeros(MC)
 start_time_UKF        = np.zeros(MC)
 
 ######################## Monte Carlo Runs ########################
@@ -100,7 +105,7 @@ for mc in range(0,MC):
     
     ######################## MC Settings ########################
     # Set seed
-    np.random.seed(mc)
+    np.random.seed(8)
     print(mc)
     
     ############################ Run truth trajectory ########################
@@ -116,49 +121,53 @@ for mc in range(0,MC):
     timesteps           = [start_time]
     truth               = GroundTruthPath([GroundTruthState(np.random.multivariate_normal(X0,P0), timestamp = start_time)])
     # Create the truth path
+    plt.figure()
     for k in range(1,nTime):
         timesteps.append(start_time + deltaT*timedelta(seconds = k))
         truth.append(GroundTruthState(transition_model.function(truth[k - 1], noise = True, time_interval = timedelta(seconds = deltaT)),timestamp = timesteps[k]))
+        plt.scatter(truth[k].state_vector[0],truth[k].state_vector[2],s = 50, color = 'blue',marker = 'o',alpha = 0.1)
+
     # Populate the measurement array
     measurements        = []
     for state in truth:
         measurement = measurement_model.function(state, noise = True)
         measurements.append(Detection(measurement, timestamp = state.timestamp, measurement_model = measurement_model))
-    
+
     ############################ Run Filters ############################
     # Initialize UKF
-    predictorUKF        = UnscentedKalmanPredictor(transition_model)####
+    predictorUKF        = UnscentedKalmanPredictor(transition_model)
     updaterUKF          = UnscentedKalmanUpdater(measurement_model)
-    priorUKF            = GaussianState(X0, P0, timestamp=start_time)
+    postUKF             = GaussianState(X0, P0, timestamp=start_time)
     # Run UKF
     start_time_UKF[mc]  = time.time()
     kTime               = 0
     for measurement in measurements:
-        prediction           = predictorUKF.predict(priorUKF, timestamp = measurement.timestamp)
+        prediction           = predictorUKF.predict(postUKF, timestamp = measurement.timestamp)
         hypothesis           = SingleHypothesis(prediction, measurement)
-        post                 = updaterUKF.update(hypothesis)
-        priorUKF             = post
-        if np.isnan(post.mean[0]):
+        postUKF              = updaterUKF.update(hypothesis)
+        plt.scatter(postUKF.mean[0],postUKF.mean[2],s = 2,color = 'black',marker = 'o',alpha = 1)
+        if np.isnan(postUKF.mean[0]):
+            print('UKF')
             errorUKF[:,kTime:-1,mc] = 1e3
             stateUKF[:,kTime:-1,mc] = 1e3
             covUKF[:,:,kTime:-1,mc] = 1e3
             neesUKF[:,kTime:-1,mc]  = 1e3
             break
-        errorUKF[:,kTime,mc] = np.array(truth.states[kTime].state_vector).T - post.mean.T
-        stateUKF[:,kTime,mc] = post.mean.T
-        covUKF[:,:,kTime,mc] = np.matrix(post.covar)
+        errorUKF[:,kTime,mc] = np.array(truth.states[kTime].state_vector).T - postUKF.mean.T
+        stateUKF[:,kTime,mc] = postUKF.mean.T
+        covUKF[:,:,kTime,mc] = np.matrix(postUKF.covar)
         neesUKF[:,kTime,mc]  = errorUKF[:,kTime,mc].reshape(1,nS) @ np.linalg.pinv(covUKF[:,:,kTime,mc]) @ errorUKF[:,kTime,mc].reshape(nS,1)
         kTime               += 1
     end_time_UKF[mc] = time.time()
 
-    del prediction, hypothesis, post
+    del prediction, hypothesis, postUKF
 
     # Initialize PMF+GSF
     predictorGMF        = PointMassPredictor(transition_model)
     updaterGMF          = PointMassUpdater(measurement_model)
-    Npa                 = np.array([9, 7, 9, 7])    # for FFT must be ODD!!!!
+    Npa                 = np.array([9, 9, 9, 9])    # for FFT must be ODD!!!!
     N                   = np.prod(Npa)              # number of points - total
-    sFactor             = 5                         # scaling factor (number of sigmas covered by the grid)
+    sFactor             = 6                         # scaling factor (number of sigmas covered by the grid)
     [predGrid, predGridDelta, gridDimOld, xOld, Ppold] = grid_creation(np.vstack(X0),P0,sFactor,nS,Npa)
     meanX0              = np.vstack(X0)
     pom                 = predGrid - np.tile(meanX0, (1, N))
@@ -167,7 +176,7 @@ for mc in range(0,MC):
     pomexp              = np.exp(pompom)
     predDensityProb     = pomexp/denominator # Adding probabilities to points
     predDensityProb     = predDensityProb/(sum(predDensityProb)*np.prod(predGridDelta))
-    priorGMF            = PointMassState(state_vector = StateVectors(predGrid),
+    postGMF             = PointMassState(state_vector = StateVectors(predGrid),
                                           weight       = predDensityProb,
                                           grid_delta   = predGridDelta,
                                           grid_dim     = gridDimOld,
@@ -180,32 +189,32 @@ for mc in range(0,MC):
     start_time_GMF[mc]  = time.time()
     kTime               = 0
     for measurement in measurements:
-        prediction           = predictorGMF.predict(priorGMF, timestamp = measurement.timestamp, runGSFversion = True, futureMeas = measurement, measModel = measurement_model)
+        prediction           = predictorGMF.predict(postGMF, timestamp = measurement.timestamp, runGSFversion = True, futureMeas = measurement, measModel = measurement_model)
         hypothesis           = SingleHypothesis(prediction, measurement)
-        post                 = updaterGMF.update(hypothesis)
-        priorGMF             = post
-        if np.isnan(post.mean[0]):
+        postGMF              = updaterGMF.update(hypothesis)
+        plt.scatter(postGMF.mean[0],postGMF.mean[2],s = 2,color = 'red',marker = 'o',alpha = 1)
+        if np.isnan(postGMF.mean[0]):
             print('GMF')
             errorGMF[:,kTime:-1,mc] = 1e3
             stateGMF[:,kTime:-1,mc] = 1e3
             covGMF[:,:,kTime:-1,mc] = 1e3
             neesGMF[:,kTime:-1,mc]  = 1e3
             break
-        errorGMF[:,kTime,mc] = np.array(truth.states[kTime].state_vector).T - post.mean
-        stateGMF[:,kTime,mc] = post.mean
-        covGMF[:,:,kTime,mc] = np.matrix(post.covar())
+        errorGMF[:,kTime,mc] = np.array(truth.states[kTime].state_vector).T - postGMF.mean
+        stateGMF[:,kTime,mc] = postGMF.mean
+        covGMF[:,:,kTime,mc] = np.matrix(postGMF.covar())
         neesGMF[:,kTime,mc]  = errorGMF[:,kTime,mc].reshape(1,nS) @ np.linalg.pinv(covGMF[:,:,kTime,mc]) @ errorGMF[:,kTime,mc].reshape(nS,1)
         kTime               += 1
     end_time_GMF[mc]    = time.time()
 
-    del prediction, hypothesis, post, priorGMF, predDensityProb, predGrid
+    del prediction, hypothesis, postGMF, predDensityProb, predGrid
 
     # Initialize PMF
     predictorPMF        = PointMassPredictor(transition_model)
     updaterPMF          = PointMassUpdater(measurement_model)
-    Npa                 = np.array([9, 9, 9, 9]) # for FFT must be ODD!!!!
-    N                   = np.prod(Npa) # number of points - total
-    sFactor             = 5 # scaling factor (number of sigmas covered by the grid)
+    Npa                 = np.array([9, 9, 9, 9])    # for FFT must be ODD!!!!
+    N                   = np.prod(Npa)              # number of points - total
+    sFactor             = 6                         # scaling factor (number of sigmas covered by the grid)
     [predGrid, predGridDelta, gridDimOld, xOld, Ppold] = grid_creation(np.vstack(X0),P0,sFactor,nS,Npa)
     meanX0              = np.vstack(X0)
     pom                 = predGrid - np.tile(meanX0, (1, N))
@@ -214,7 +223,7 @@ for mc in range(0,MC):
     pomexp              = np.exp(pompom)
     predDensityProb     = pomexp/denominator # Adding probabilities to points
     predDensityProb     = predDensityProb/(sum(predDensityProb)*np.prod(predGridDelta))
-    priorPMF            = PointMassState(state_vector = StateVectors(predGrid),
+    postPMF             = PointMassState(state_vector = StateVectors(predGrid),
                                          weight       = predDensityProb,
                                          grid_delta   = predGridDelta,
                                          grid_dim     = gridDimOld,
@@ -227,56 +236,60 @@ for mc in range(0,MC):
     start_time_PMF[mc]  = time.time()
     kTime               = 0
     for measurement in measurements:
-        prediction           = predictorPMF.predict(priorPMF, timestamp = measurement.timestamp, runGSFversion = False, futureMeas = measurement, measModel = measurement_model)
+        prediction           = predictorPMF.predict(postPMF, timestamp = measurement.timestamp, runGSFversion = False, futureMeas = measurement, measModel = measurement_model)
         hypothesis           = SingleHypothesis(prediction, measurement)
-        post                 = updaterPMF.update(hypothesis)
-        priorPMF             = post
-        if np.isnan(post.mean[0]):
+        postPMF              = updaterPMF.update(hypothesis)
+        plt.scatter(postPMF.mean[0],postPMF.mean[2],s = 2,color = 'cyan',marker = 'o',alpha = 1)
+        if np.isnan(postPMF.mean[0]):
             print('PMF')
             errorPMF[:,kTime:-1,mc] = 1e3
             statePMF[:,kTime:-1,mc] = 1e3
             covPMF[:,:,kTime:-1,mc] = 1e3
             neesPMF[:,kTime:-1,mc]  = 1e3
             break
-        errorPMF[:,kTime,mc] = np.array(truth.states[kTime].state_vector).T - post.mean
-        statePMF[:,kTime,mc] = post.mean
-        covPMF[:,:,kTime,mc] = np.matrix(post.covar())
+        errorPMF[:,kTime,mc] = np.array(truth.states[kTime].state_vector).T - postPMF.mean
+        statePMF[:,kTime,mc] = postPMF.mean
+        covPMF[:,:,kTime,mc] = np.matrix(postPMF.covar())
         neesPMF[:,kTime,mc]  = errorPMF[:,kTime,mc].reshape(1,nS) @ np.linalg.pinv(covPMF[:,:,kTime,mc]) @ errorPMF[:,kTime,mc].reshape(nS,1)
         kTime               += 1
     end_time_PMF[mc]    = time.time()
 
-    del prediction, hypothesis, post, priorPMF, predDensityProb, predGrid
+    del prediction, hypothesis, postPMF, predDensityProb, predGrid
     
     # Initialize PF-Systematic
-    nParticles_Sys              = np.round(3*N).astype(int)
-    predictorPF_Systematic      = ParticlePredictor(transition_model)
-    resamplerPF_Systematic      = SystematicResampler()
-    resamplerPF_Systematic      = ESSResampler(threshold = nParticles_Sys*0.8, resampler = resamplerPF_Systematic)
-    updaterPF_Systematic        = ParticleUpdater(measurement_model, resamplerPF_Systematic)
-    samplesPF_Systematic        = multivariate_normal.rvs(X0, P0, size = nParticles_Sys)
-    priorPF_Systematic          = ParticleState(state_vector = StateVectors(samplesPF_Systematic.T), weight = np.array([Probability(1/nParticles_Sys)]*nParticles_Sys), timestamp = start_time)
+    nParticlesS                 = np.round(2.5*N).astype(int)
+    predictorPFS                = ParticlePredictor(transition_model)
+    resamplerPFS                = SystematicResampler()
+    resamplerPFS                = ESSResampler(threshold = nParticlesS*0.8, resampler = resamplerPFS)
+    updaterPFS                  = ParticleUpdater(measurement_model, resamplerPFS)
+    samplesPFS                  = multivariate_normal.rvs(X0, P0, size = nParticlesS)
+    postPFS                     = ParticleState(state_vector = StateVectors(samplesPFS.T), weight = np.array([Probability(1/nParticlesS)]*nParticlesS), timestamp = start_time)
 
     # Run PF-Systematic
-    start_time_Systematic[mc]   = time.time()
+    start_time_PFS[mc]          = time.time()
     kTime                       = 0
     for measurement in measurements:
-        prediction                      = predictorPF_Systematic.predict(priorPF_Systematic, timestamp = measurement.timestamp)
+        prediction                      = predictorPFS.predict(postPFS, timestamp = measurement.timestamp)
         hypothesis                      = SingleHypothesis(prediction, measurement)
-        post                            = updaterPF_Systematic.update(hypothesis)
-        if np.isnan(post.mean[0]):
-            errorPF_Systematic[:,kTime:-1,mc] = 1e3
-            statePF_Systematic[:,kTime:-1,mc] = 1e3
-            covPF_Systematic[:,:,kTime:-1,mc] = 1e3
-            neesPF_Systematic[:,kTime:-1,mc]  = 1e3
+        postPFS                         = updaterPFS.update(hypothesis)
+        plt.scatter(postPFS.mean[0],postPFS.mean[2],s = 2,color = 'green',marker = 'o',alpha = 1)
+        if np.isnan(postPFS.mean[0]):
+            print('PFS')
+            errorPFS[:,kTime:-1,mc] = 1e3
+            statePFS[:,kTime:-1,mc] = 1e3
+            covPFS[:,:,kTime:-1,mc] = 1e3
+            neesPFS[:,kTime:-1,mc]  = 1e3
             break
-        priorPF_Systematic              = post
-        errorPF_Systematic[:,kTime,mc]  = np.array(truth.states[kTime].state_vector).T - np.array(post.mean).T
-        statePF_Systematic[:,kTime,mc]  = np.array(post.mean).T
-        covPF_Systematic[:,:,kTime,mc]  = np.matrix(post.covar)
-        neesPF_Systematic[:,kTime,mc]   = errorPF_Systematic[:,kTime,mc].reshape(1,nS) @ np.linalg.pinv(covPF_Systematic[:,:,kTime,mc]) @ errorPF_Systematic[:,kTime,mc].reshape(nS,1)
+        priorPFS              = postPFS
+        errorPFS[:,kTime,mc]  = np.array(truth.states[kTime].state_vector).T - np.array(postPFS.mean).T
+        statePFS[:,kTime,mc]  = np.array(postPFS.mean).T
+        covPFS[:,:,kTime,mc]  = np.matrix(postPFS.covar)
+        neesPFS[:,kTime,mc]   = errorPFS[:,kTime,mc].reshape(1,nS) @ np.linalg.pinv(covPFS[:,:,kTime,mc]) @ errorPFS[:,kTime,mc].reshape(nS,1)
         kTime                           += 1
-    end_time_Systematic[mc]     = time.time()
-    del prediction, hypothesis, post, priorPF_Systematic, samplesPF_Systematic
+    end_time_PFS[mc]            = time.time()
+    del prediction, hypothesis, postPFS, priorPFS, samplesPFS
+
+plt.show()
 
 ############################ Plotting ############################
 # Plotting Settings
@@ -305,9 +318,10 @@ data_1 = np.mean(np.sqrt(np.mean(errorGMF[[0, 2], :, :]**2, axis=0)), axis=0)
 print(np.mean(data_1))
 data_2 = np.mean(np.sqrt(np.mean(errorPMF[[0, 2], :, :]**2, axis=0)), axis=0)
 print(np.mean(data_2))
-data_3 = np.mean(np.sqrt(np.mean(errorPF_Systematic[[0, 2], :, :]**2, axis=0)), axis=0)
+data_3 = np.mean(np.sqrt(np.mean(errorPFS[[0, 2], :, :]**2, axis=0)), axis=0)
 print(np.mean(data_3))
 data_4 = np.mean(np.sqrt(np.mean(errorUKF[[0, 2], :, :]**2, axis=0)), axis=0)
+print(np.mean(data_4))
 data   = [data_1, data_2, data_3, data_4]
 bp     =  axs[0].boxplot(data,patch_artist = True,
                     boxprops = dict(facecolor = translucent_blue,color = cb_colors['neutral'],linewidth = 2),
@@ -317,8 +331,8 @@ axs[0].tick_params(which='both', width=2)
 axs[0].tick_params(which='major', length=7)
 axs[0].tick_params(which='minor', length=4)
 axs[0].set_xticks([1, 2, 3, 4])
-axs[0].set_xticklabels(['GMF', 'PMF', 'Sys', 'UKF'])
-axs[0].set_ylabel(r'\textbf{RMSE} Position (m)') # axs[0].set_ylim([25, 75]) # np.save("posPMF.npy", data_2)
+axs[0].set_xticklabels(['GMF', 'PMF', 'PFS', 'UKF'])
+axs[0].set_ylabel(r'\textbf{RMSE} Position (m)')
 # Create inset for RMSE Position
 axins0 = inset_axes(axs[0], width="50%", height="50%", loc='upper left', borderpad=2)
 bp_ins = axins0.boxplot(data, patch_artist=True,
@@ -330,7 +344,7 @@ axins0.yaxis.tick_right()
 # RMSE Velocity
 data_1 = np.mean(np.sqrt(np.mean(errorGMF[[1, 3], :, :]**2, axis=0)), axis=0)
 data_2 = np.mean(np.sqrt(np.mean(errorPMF[[1, 3], :, :]**2, axis=0)), axis=0)
-data_3 = np.mean(np.sqrt(np.mean(errorPF_Systematic[[1, 3], :, :]**2, axis=0)), axis=0)
+data_3 = np.mean(np.sqrt(np.mean(errorPFS[[1, 3], :, :]**2, axis=0)), axis=0)
 data_4 = np.mean(np.sqrt(np.mean(errorUKF[[1, 3], :, :]**2, axis=0)), axis=0)
 data   = [data_1, data_2, data_3, data_4]
 bp     =  axs[1].boxplot(data,patch_artist = True,
@@ -341,8 +355,8 @@ axs[1].tick_params(which='both', width=2)
 axs[1].tick_params(which='major', length=7)
 axs[1].tick_params(which='minor', length=4)
 axs[1].set_xticks([1, 2, 3, 4])
-axs[1].set_xticklabels(['GMF', 'PMF', 'Sys', 'UKF'])
-axs[1].set_ylabel(r'\textbf{RMSE} Velocity (m/s)') #axs[1].set_ylim([5, 15]) #np.save("velPMF.npy", data_2)
+axs[1].set_xticklabels(['GMF', 'PMF', 'PFS', 'UKF'])
+axs[1].set_ylabel(r'\textbf{RMSE} Velocity (m/s)')
 axins1 = inset_axes(axs[1], width="50%", height="50%", loc='upper left', borderpad=2)
 bp_ins = axins1.boxplot(data, patch_artist=True,
                         boxprops=dict(facecolor=translucent_blue, color=cb_colors['neutral'], linewidth=2),
@@ -353,7 +367,7 @@ axins1.yaxis.tick_right()
 # SNEES
 data_1 = np.median(neesGMF,axis = 1)[0]/nS
 data_2 = np.median(neesPMF,axis = 1)[0]/nS
-data_3 = np.median(neesPF_Systematic,axis = 1)[0]/nS
+data_3 = np.median(neesPFS,axis = 1)[0]/nS
 data_4 = np.median(neesUKF,axis = 1)[0]/nS
 data   = [data_1, data_2, data_3, data_4]
 bp     =  axs[2].boxplot(data,patch_artist = True,
@@ -364,8 +378,8 @@ axs[2].tick_params(which='both', width=2)
 axs[2].tick_params(which='major', length=7)
 axs[2].tick_params(which='minor', length=4)
 axs[2].set_xticks([1, 2, 3, 4])
-axs[2].set_xticklabels(['GMF', 'PMF', 'Sys', 'UKF'])
-axs[2].set_ylabel(r'\textbf{SNEES} Position') #axs[2].set_ylim([0.3, 0.8]) #np.save("annesPMF.npy", data_2) # fig.savefig("STATS_LOW_FLAT.pdf", format='pdf', dpi=1000, bbox_inches='tight')
+axs[2].set_xticklabels(['GMF', 'PMF', 'PFS', 'UKF'])
+axs[2].set_ylabel(r'\textbf{SNEES} Position')
 axins2 = inset_axes(axs[2], width="50%", height="50%", loc='upper left', borderpad=2)
 bp_ins = axins2.boxplot(data, patch_artist=True,
                         boxprops=dict(facecolor=translucent_blue, color=cb_colors['neutral'], linewidth=2),
@@ -378,17 +392,18 @@ axins2.yaxis.tick_right()
 # Calculate the mean times for each filter method
 mean_time_GMF           = np.mean(end_time_GMF - start_time_GMF)/nTime
 mean_time_PMF           = np.mean(end_time_PMF - start_time_PMF)/nTime
-mean_time_Systematic    = np.mean(end_time_Systematic - start_time_Systematic)/nTime
+mean_time_PFS           = np.mean(end_time_PFS - start_time_PFS)/nTime
 mean_time_UKF           = np.mean(end_time_UKF - start_time_UKF)/nTime
 # Create a list of the mean times and filter labels
-mean_times              = [mean_time_GMF, mean_time_PMF, mean_time_Systematic, mean_time_UKF]
-filters                 = ['GMF', 'PMF', 'Sys', 'UKF']
+mean_times              = [mean_time_GMF, mean_time_PMF, mean_time_PFS, mean_time_UKF]
+filters                 = ['GMF', 'PMF', 'PFS', 'UKF']
 # Create the bar plot
 fig, ax = plt.subplots(figsize=(8, 6))
 ax.bar(filters, mean_times, color='skyblue', edgecolor='black')
 # Set labels and title
 ax.set_xlabel('Filter Method', fontsize=14)
 ax.set_ylabel('Mean Time (s)', fontsize=14)
-ax.set_title('Mean Time for Each Filter Method', fontsize=16) # fig.savefig("TIME_LOW_FLAT.pdf", format='pdf', dpi=1000, bbox_inches='tight') #np.save("timePMF.npy", data_2)
-# Show the plot
+ax.set_title('Mean Time for Each Filter Method', fontsize=16)
+
+# Show plots
 plt.show()
